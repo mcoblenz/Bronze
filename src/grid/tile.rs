@@ -1,4 +1,3 @@
-// use rand::Rng;
 use std::fmt;
 
 enum DevelopmentLevel {
@@ -10,22 +9,15 @@ enum DevelopmentLevel {
 
 pub trait Tile {
     // For now, we render in plaintext only.
-    fn print(&self) -> String;
-    
-    // Cause the tile to take one step forward in the simulation.
-    fn step(&self); 
+    // fn print(&self) -> String;
 }
 
 pub struct EmptyTile {}
 
 impl Tile for EmptyTile {
-    fn print(&self) -> String {
-        String::from(" ")
-    }
-
-    fn step(&self) {
-        // Nothing to do.
-    }
+    // fn print(&self) -> String {
+    //     String::from(" ")
+    // }
 }
 
 impl fmt::Display for dyn Tile {
@@ -35,16 +27,18 @@ impl fmt::Display for dyn Tile {
 }
 
 
-struct ZonedTile {
+pub struct ZonedTile {
     development_level: DevelopmentLevel,
 }
 
 impl ZonedTile {
-    fn step() {
-        // let mut rng = rand::thread_rng();
-
-        // let n = rng.gen();
+    pub fn new() -> Self {
+        ZonedTile {development_level: DevelopmentLevel::Vacant}
     }
+}
+
+impl Tile for ZonedTile {
+
 }
 
 impl fmt::Display for ZonedTile {
