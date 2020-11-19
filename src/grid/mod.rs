@@ -5,7 +5,7 @@ use std::fmt;
 pub mod tile;
 
 pub struct Grid {
-    rows: Vec<Vec<Box<dyn tile::Tile>>>
+    pub rows: Vec<Vec<Box<dyn tile::Tile>>>
 }
 
 impl Grid {
@@ -24,50 +24,6 @@ impl Grid {
 
         Grid{rows}
     }
-
-    pub fn iter_mut(&mut self) -> IterMut {
-        IterMut {next_col: 0, next_row: 0, grid: self}
-    }
-}
-
-struct IntoIter {
-    next_col: usize,
-    next_row: usize,
-    grid: Grid,
-}
-
-impl Iterator for IntoIter {
-    type Item = Box<dyn tile::Tile>;
-    
-    fn next(&mut self) -> Option<Self::Item> {
-        // If we're already past the end, stop.
-        if self.next_row >= self.grid.rows.len() {
-            return None;
-        }
-        // Otherwise, we should be within the grid.
-        let current_row = self.grid.rows[self.next_row];
-        let row_len = current_row.len();
-        let result = current_row[self.next_col];
-
-        self.next_col = self.next_col + 1;
-
-        // Update indices
-        if self.next_col >= row_len {
-            self.next_col = 0;
-            self.next_row = self.next_row + 1;
-        }
-
-        return Some(result);
-    }
-}
-
-impl IntoIterator for Grid {
-    type Item = Box<dyn tile::Tile>;
-    type IntoIter = IntoIter;
-
-    fn into_iter(self) -> Self::IntoIter {
-        IntoIter{next_col: 0, next_row: 0, grid: self}
-    }
 }
 
 impl fmt::Display for Grid {
@@ -85,41 +41,6 @@ impl fmt::Display for Grid {
                 write!(f, "{}", c)?;
             }
         }
-        Ok(())
-    }
-}
-
-
-pub struct IterMut<'a> {
-    // TODO
-    // row_iter: std::slice::IterMut<'a, Box<dyn tile::Tile>>,
-    
-    next_col: usize,
-    next_row: usize,
-    grid: &'a mut Grid,
-}
-
-impl<'a> Iterator for IterMut<'a> {
-    type Item = &'a mut Box<dyn tile::Tile>;
-
-    fn next(&mut self) -> Option<&'a mut Box<dyn tile::Tile>> {
-        // If we're already past the end, stop.
-        if self.next_row >= self.grid.rows.len() {
-            return None;
-        }
-        // Otherwise, we should be within the grid.
-        let current_row: &Vec<Box<dyn tile::Tile>> = &self.grid.rows[self.next_row];
-        let row_len = current_row.len();
-        let result = &mut current_row[self.next_col];
-
-        self.next_col = self.next_col + 1;
-
-        // Update indices
-        if self.next_col >= row_len {
-            self.next_col = 0;
-            self.next_row = self.next_row + 1;
-        }
-
-        return Some(result);
+        write!(f, "\n")
     }
 }

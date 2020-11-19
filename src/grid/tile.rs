@@ -1,34 +1,29 @@
 use std::fmt;
 
-enum DevelopmentLevel {
+pub enum DevelopmentLevel {
     Rubble,
     Vacant,
     LowDensity,
     HighDensity,
 }
 
-pub trait Tile {
+pub trait Tile: fmt::Display {
     // For now, we render in plaintext only.
-    // fn print(&self) -> String;
 }
 
 pub struct EmptyTile {}
 
 impl Tile for EmptyTile {
-    // fn print(&self) -> String {
-    //     String::from(" ")
-    // }
 }
 
-impl fmt::Display for dyn Tile {
+impl fmt::Display for EmptyTile {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, " ")
     }
 }
 
-
 pub struct ZonedTile {
-    development_level: DevelopmentLevel,
+    pub development_level: DevelopmentLevel,
 }
 
 impl ZonedTile {
@@ -38,7 +33,7 @@ impl ZonedTile {
 }
 
 impl Tile for ZonedTile {
-
+    
 }
 
 impl fmt::Display for ZonedTile {
