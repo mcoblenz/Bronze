@@ -1,0 +1,2 @@
+[workspace]
+members = ["bronze", "prototypes/city", "prototypes/city_gc"]

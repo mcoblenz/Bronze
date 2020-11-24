@@ -1,23 +1,25 @@
 // A Grid represents a plot of land, divided into squares. 
 // It is of fixed size.
 use std::fmt;
+use bronze::GCRef;
+use bronze::GC;
 
 pub mod tile;
 
 pub struct Grid {
-    pub rows: Vec<Vec<Box<dyn tile::Tile>>>
+    pub rows: Vec<Vec<GCRef<dyn tile::Tile>>>
 }
 
 impl Grid {
     pub fn new(num_rows: usize, num_cols: usize) -> Grid {
-        let mut rows: Vec<Vec<#tile::Tile>> = Vec::new();
+        let mut rows: Vec<Vec<GCRef<dyn tile::Tile>>> = Vec::new();
 
         for _r in 0..num_rows {
             // Interestingly, if I remove this type annotation, the line below won't typecheck!
             // ^^^ expected trait object `dyn grid::tile::Tile`, found struct `grid::tile::EmptyTile`
-            let mut row: Vec<Box<# tile::Tile>> = Vec::new();
+            let mut row: Vec<GCRef<dyn tile::Tile>> = Vec::new();
             for _c in 0..num_cols {
-                row.push(new tile::EmptyTile{});
+                row.push(GC::new(Box::new(tile::EmptyTile{})));
             }
             rows.push(row);
         }
@@ -37,8 +39,9 @@ impl fmt::Display for Grid {
             if is_first {
                 is_first = false;
             }
-            for c in &*r {
-                write!(f, "{}", c)?;
+            for c in r {
+                let s = c.to_string();
+                write!(f, "{}", s)?;
             }
         }
         write!(f, "\n")

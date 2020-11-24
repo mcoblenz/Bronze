@@ -7,7 +7,7 @@ fn main() {
 
     print!("initial grid:");
     print!("{}", grid);
-    for i in 0..10 {
+    for _i in 0..10 {
         sim::step(&mut grid);
         print!("{}", grid);    
     }
