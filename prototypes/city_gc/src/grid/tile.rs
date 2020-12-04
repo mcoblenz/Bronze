@@ -11,6 +11,8 @@ pub trait Tile: fmt::Display {
     // For now, we render in plaintext only.
 }
 
+impl bronze::GcTrace for dyn Tile {}
+
 pub struct EmptyTile {}
 
 impl Tile for EmptyTile {
@@ -21,6 +23,9 @@ impl fmt::Display for EmptyTile {
         write!(f, " ")
     }
 }
+
+impl bronze::GcTrace for EmptyTile {}
+
 
 pub struct ZonedTile {
     pub development_level: DevelopmentLevel,
@@ -47,3 +52,5 @@ impl fmt::Display for ZonedTile {
         write!(f, "{}", str)
     }
 }
+
+impl bronze::GcTrace for ZonedTile {}

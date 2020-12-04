@@ -1,6 +1,6 @@
 use rand::prelude::*;
 use crate::grid::*;
-use bronze::GC;
+use bronze::Gc;
 
 
 pub fn step(grid: &mut Grid) {
@@ -12,7 +12,7 @@ pub fn step(grid: &mut Grid) {
             if n == 0 {
                 let new_tile = tile::ZonedTile::new();                
                 let new_tile_box = Box::new(new_tile);
-                *t = GC::new(new_tile_box);
+                *t = Gc::new(new_tile_box);
             }
         }
     }
