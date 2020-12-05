@@ -8,6 +8,8 @@ pub trait GcTrace {
 
 }
 
+impl GcTrace for u32 {}
+
 /*
 * I want the following kinds of references to Gc objects:
 * 1. References IN the Gc heap (GcRef)
@@ -47,11 +49,22 @@ impl<T: GcTrace> GcBox<T> {
     pub fn ref_from_ptr(ptr: NonNull<Self>) -> GcRef<T> {
         GcRef {obj_ref: ptr}
     }
+
+    pub fn borrow_value(&self) -> &T {
+        &self.data
+    }
 }
 
 // GcRef represents a reference WITHIN the GC heap.
-pub struct GcRef<T: ?Sized + GcTrace> {
+pub struct GcRef<T: GcTrace + ?Sized> {
     obj_ref: NonNull<GcBox<T>>,
+}
+
+impl<T: GcTrace + ?Sized> GcRef<T> {
+    pub fn borrow<'a>(&self) -> &'a T {
+        let gc_box = self.obj_ref.as_ref();
+        gc_box.borrow_value()
+    }
 }
 
 impl<T: GcTrace + ?Sized> GcTrace for GcRef<T> {
@@ -69,15 +82,16 @@ struct GcUntypedRoot {
     obj: NonNull<GcBox<dyn GcTrace>>,
 }
 
-// struct GcHandle<T> {
-//     obj_ref: Rc<GcUntypedRoot>,
-//     phantom: PhantomData<T>,
-// }
 
-// // Master list of all roots, for use in doing tracing.
-// struct GcRoots {
-//     roots_vec: Vec<dyn GcTrace>,
-// }
+// GcHandle is Move, not Copy.
+struct GcHandle<T: GcTrace + ?Sized>{
+    obj_ref: GcRef<T>,
+}
+
+// Master list of all roots, for use in doing tracing.
+struct GcRoots {
+    roots_vec: Vec<GcUntypedRoot>,
+}
 
 
 // This is for prototyping only.
@@ -98,8 +112,14 @@ impl<T: GcTrace + ?Sized> GcTrace for Box<T> {}
 
 #[cfg(test)]
 mod tests {
+    use crate::Gc;
+
     #[test]
-    fn new_handle() {
-        assert_eq!(2 + 2, 4);
+    fn new_ref() {
+        let num_ref = Gc::new(42);
+        let ref_alias = num_ref;
+
+
+        assert_eq!(num_ref., 42);
     }
 }
