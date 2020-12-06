@@ -193,6 +193,10 @@ impl GcRoots {
         println!("Dropped root {:?} from roots list.", root)
     }
 
+    fn len(&self) -> usize {
+        self.roots.len()
+    }
+
     // TODO
     fn trace() {
         todo!();
@@ -202,6 +206,12 @@ impl GcRoots {
 // Each thread has its own list of roots, since GC references are neither Send nor Sync.
 thread_local! {
     pub static ROOTS: RefCell<GcRoots> = RefCell::new(GcRoots::new());
+}
+
+pub fn roots_len() -> usize {
+    ROOTS.with(|roots| {
+        return (*roots.borrow()).len()
+    })
 }
 
 // This is for prototyping only.
@@ -250,5 +260,27 @@ mod tests {
         //assert_eq!(*num_handle, 42);
        
         assert_eq!(*moved_handle, 42);
+    }
+
+    fn roots() {
+        assert_eq!(roots_len(), 0);
+        let num_gc_ref = Gc::new(42);
+        {
+            let num_handle = GcHandle::new(num_gc_ref);
+            assert_eq!(roots_len(), 1);
+            let _moved_handle = num_handle;
+            assert_eq!(roots_len(), 1);
+        }
+
+        // Handles are now out of scope, so size should be 0.
+        assert_eq!(roots_len(), 0);
+
+        {
+            // Two handles for the same object.
+            let num_handle = GcHandle::new(num_gc_ref);
+            let num_handle2 = GcHandle::new(num_gc_ref);
+            assert_eq!(roots_len(), 2);
+        }
+        assert_eq!(roots_len(), 0);
     }
 }
