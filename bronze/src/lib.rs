@@ -3,6 +3,7 @@ use std::ptr::NonNull;
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::boxed::Box;
+use std::mem;
 use core::ops::Deref;
 
 pub trait GcTrace {
@@ -18,11 +19,38 @@ impl GcTrace for u32 {}
 * 3. References in the Rust heap (GcHandle)
 */
 
+// The copypasta between nullable and regular types should be removed somehow.
+
 
 // Based on rust-gc by Manishearth.
 // These go on the Gc heap and hold the actual Gc data.
-pub struct GcBox<T: GcTrace + ?Sized + 'static> { // TODO: make T 'static?
+pub struct GcBox<T: GcTrace + ?Sized + 'static> {
     data: T,
+}
+
+// GcNullableBox has a storage cost relative to GcBox, so I
+// don't want to just replace GcBox with GcNullableBox.
+pub struct GcNullableBox<T: GcTrace + ?Sized + 'static> {
+    is_null: bool,
+    data: T,
+}
+
+impl<T: GcTrace + 'static> GcNullableBox<T> {
+    pub fn take(&mut self) -> Option<T> {
+        if self.is_null {
+            None
+        }
+        else {
+            self.is_null = true; 
+            unsafe {
+                // Can't move even from behind a raw pointer,
+                // so I appear to be stuck with transmute_copy here
+                // (to avoid requiring T to implement the Default trait).
+                let result: T = mem::transmute_copy(&self.data);
+                Some(result)
+            }
+        }
+    }
 }
 
 impl<T: GcTrace> GcBox<T> {
@@ -54,6 +82,36 @@ impl<T: GcTrace + ?Sized> GcBox<T> {
     }
 }
 
+impl<T: GcTrace> GcNullableBox<T> {
+    pub fn new(data: T) -> NonNull<Self> {
+        let bx = Box::new(GcNullableBox {is_null: false, data});
+        let bx_ptr = Box::into_raw(bx);
+
+        unsafe {NonNull::new_unchecked(bx_ptr)}
+    }
+}
+
+impl<T: GcTrace + ?Sized> GcNullableBox<T> {
+    pub fn new_ref(&mut self) -> GcNullableRef<T> {
+        let ptr: *mut Self = self;
+
+        GcNullableRef {obj_ref: unsafe {NonNull::new_unchecked(ptr)}}
+    }
+
+    pub fn ref_from_ptr(ptr: NonNull<Self>) -> GcNullableRef<T> {
+        GcNullableRef {obj_ref: ptr}
+    }
+
+    pub fn as_ref(&self) -> &T {
+        &self.data
+    }
+
+    pub fn as_mut_ref(&mut self) -> &mut T {
+        &mut self.data
+    }
+}
+
+//================= GcRef =================
 // GcRef represents a reference WITHIN the GC heap.
 #[derive(std::cmp::Eq)]
 pub struct GcRef<T: GcTrace + ?Sized + 'static> {
@@ -108,15 +166,105 @@ impl<T: GcTrace + ?Sized + std::fmt::Display> std::fmt::Display for GcRef<T> {
     }
 }
 
+//===================== GcNullableRef =================
+
+// GcRef represents a reference WITHIN the GC heap.
+#[derive(std::cmp::Eq)]
+pub struct GcNullableRef<T: GcTrace + ?Sized + 'static> {
+    obj_ref: NonNull<GcNullableBox<T>>,
+}
+
+impl<T: GcTrace + ?Sized> GcNullableRef<T> {
+    // "as_ref" is used to obtain a reference to the underlying data.
+    pub fn as_ref<'a>(&'a self) -> &'a T {
+        unsafe {
+            let gc_box = self.obj_ref.as_ref();
+            gc_box.as_ref()
+        }
+    }
+
+    pub fn as_mut_ref<'a>(&'a mut self) -> &'a mut T {
+        unsafe {
+            let gc_box = self.obj_ref.as_mut();
+            gc_box.as_mut_ref()
+        }
+    }
+}
+
+impl<T: GcTrace + ?Sized> Clone for GcNullableRef<T> {
+    fn clone(&self) -> Self {
+        GcNullableRef {obj_ref: self.obj_ref}
+    }
+}
+
+impl<T: GcTrace> GcNullableRef<T> {
+    // Take only works once! Returns None if the value was already taken.
+    pub fn remove(&mut self) -> Option<T> {
+        unsafe {
+            let gc_box = self.obj_ref.as_mut();
+            gc_box.take()
+        }
+    }
+}
+
+impl<T: GcTrace + ?Sized + 'static> Copy for GcNullableRef<T> {}
+
+impl<T: GcTrace + ?Sized> GcTrace for GcNullableRef<T> {
+    // TODO
+}
+
+
+impl<T: ?Sized + GcTrace> PartialEq for GcNullableRef<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.obj_ref == other.obj_ref
+    }
+}
+
+impl<T: ?Sized + GcTrace> std::hash::Hash for GcNullableRef<T> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.obj_ref.hash(state);
+    }
+}
+
+impl<T: GcTrace + ?Sized + std::fmt::Display> std::fmt::Display for GcNullableRef<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        unsafe {(self.obj_ref).as_ref().data.fmt(f)}
+    }
+}
+
+//===================== GcUntypedRoot =================
+
+
+#[derive(Hash, Debug, Clone)]
+enum GcMaybeNullableRoot {
+    BoxRef(NonNull<GcBox<dyn GcTrace>>),
+    NullableBoxRef(NonNull<GcNullableBox<dyn GcTrace>>),
+}
+
+impl std::cmp::PartialEq for GcMaybeNullableRoot {
+    fn eq(&self, other: &Self) -> bool {
+        match self {
+            GcMaybeNullableRoot::BoxRef(ptr1) => match other {
+                GcMaybeNullableRoot::BoxRef(ptr2) => ptr1 == ptr2,
+                _ => false
+            }
+            GcMaybeNullableRoot::NullableBoxRef(ptr1) => match other {
+                GcMaybeNullableRoot::NullableBoxRef(ptr2) => ptr1 == ptr2,
+                _ => false
+            }
+        }
+    }
+}
+
 #[derive(Hash, Debug)]
-struct GcUntypedRoot {
-    gc_ref: NonNull<GcBox<dyn GcTrace>>,
+pub struct GcUntypedRoot {
+    gc_ref: GcMaybeNullableRoot,
 }
 
 impl GcUntypedRoot {
     pub fn new(gc_ref: NonNull<GcBox<dyn GcTrace>>) -> Self {
         // Transmute here lets us ignore the lifetime of T.
-        GcUntypedRoot {gc_ref}
+        GcUntypedRoot{gc_ref: GcMaybeNullableRoot::BoxRef (gc_ref)}
     }
 }
 
@@ -223,6 +371,11 @@ impl<T: GcTrace> Gc<T> {
     pub fn new(b: T) -> GcRef<T> {
         let gc_box = GcBox::new(b);
         GcBox::ref_from_ptr(gc_box)
+    }
+
+    pub fn new_nullable(b: T) -> GcNullableRef<T> {
+        let gc_box = GcNullableBox::new(b);
+        GcNullableBox::ref_from_ptr(gc_box)
     }
 }
 
