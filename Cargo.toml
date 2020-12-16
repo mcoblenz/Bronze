@@ -1,2 +1,2 @@
 [workspace]
-members = ["bronze", "prototypes/city", "prototypes/city_gc", "prototypes/list_gc"]
+members = ["bronze", "prototypes/city", "prototypes/city_gc", "prototypes/list_gc", "prototypes/draw_gc"]
