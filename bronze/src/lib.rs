@@ -77,7 +77,7 @@ impl<T: GcTrace + ?Sized> GcBox<T> {
         &self.data
     }
 
-    pub fn as_mut_ref(&mut self) -> &mut T {
+    pub fn as_mut(&mut self) -> &mut T {
         &mut self.data
     }
 }
@@ -106,7 +106,7 @@ impl<T: GcTrace + ?Sized> GcNullableBox<T> {
         &self.data
     }
 
-    pub fn as_mut_ref(&mut self) -> &mut T {
+    pub fn as_mut(&mut self) -> &mut T {
         &mut self.data
     }
 }
@@ -127,10 +127,10 @@ impl<T: GcTrace + ?Sized> GcRef<T> {
         }
     }
 
-    pub fn as_mut_ref<'a>(&'a mut self) -> &'a mut T {
+    pub fn as_mut<'a>(&'a mut self) -> &'a mut T {
         unsafe {
             let gc_box = self.obj_ref.as_mut();
-            gc_box.as_mut_ref()
+            gc_box.as_mut()
         }
     }
 }
@@ -183,10 +183,10 @@ impl<T: GcTrace + ?Sized> GcNullableRef<T> {
         }
     }
 
-    pub fn as_mut_ref<'a>(&'a mut self) -> &'a mut T {
+    pub fn as_mut<'a>(&'a mut self) -> &'a mut T {
         unsafe {
             let gc_box = self.obj_ref.as_mut();
-            gc_box.as_mut_ref()
+            gc_box.as_mut()
         }
     }
 }
@@ -301,6 +301,10 @@ impl<T: GcTrace> GcHandle<T> {
         });
 
         GcHandle {gc_ref}
+    }
+
+    pub fn gc_ref(&self) -> GcRef<T> {
+        self.gc_ref
     }
 }
 

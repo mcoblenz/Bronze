@@ -44,7 +44,7 @@ impl<T> List<T> {
     }
 
     pub fn push(self_ref: &mut GcNullableRef<Self>, value: T) {
-        let list = self_ref.as_mut_ref();
+        let list = self_ref.as_mut();
          match &mut list.head {
              None => {
                  let new_head = Node {
@@ -64,14 +64,14 @@ impl<T> List<T> {
                  let new_head_gc = Gc::new_nullable(new_head);
 
                  assert!(orig_head.as_ref().prev.is_none());
-                 orig_head.as_mut_ref().prev = Some(new_head_gc);
+                 orig_head.as_mut().prev = Some(new_head_gc);
                  list.head = Some(new_head_gc);
              }
          }
     }
 
     pub fn pop(self_ref: &mut GcNullableRef<Self>) -> Option<T> {
-        let list = self_ref.as_mut_ref();
+        let list = self_ref.as_mut();
 
         // Will need to update head_ref with the new head.
         let head_opt_ref = &mut list.head;

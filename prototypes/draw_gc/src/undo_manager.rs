@@ -1,18 +1,22 @@
 use bronze::*;
 
-trait Command {
-    fn undo(&self);
-    fn redo(&self);
-}
+use crate::command::Command;
 
-impl GcTrace for Command {}
 
 pub struct UndoManager {
-    undo_stack: Vec<GcHandle<Box<dyn Command>>>
+    undo_stack: Vec<Box<dyn Command>>
 }
 
 impl UndoManager {
-    fn undo(&mut self) {
+    pub fn new() -> Self {
+        UndoManager {undo_stack: Vec::new()}
+    }
+
+    pub fn push_command(&mut self, cmd: Box<dyn Command>) {
+        self.undo_stack.push(cmd);
+    }
+
+    pub fn undo(&mut self) {
 
     }
 }
