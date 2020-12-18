@@ -3,7 +3,7 @@ use bronze::*;
 use std::vec::Vec;
 
 pub struct Document {
-    shapes: Vec<GcRef<Box<dyn Shape>>>,
+    pub shapes: Vec<GcRef<Box<dyn Shape>>>,
 }
 
 impl Document {

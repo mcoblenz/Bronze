@@ -3,6 +3,7 @@ use winit::{
     event::{Event, WindowEvent, ElementState, MouseButton},
     event_loop::ControlFlow,
 };
+use pixels::{Error, Pixels, SurfaceTexture};
 
 mod document_window_controller;
 mod document;
@@ -12,13 +13,30 @@ mod square;
 mod undo_manager;
 mod command;
 mod insert_shape_command;
+mod graphics_context;
 
 use crate::document_window_controller::DocumentWindowController;
 
 fn main() {
     let event_loop = winit::event_loop::EventLoop::new();
 
-    let mut doc = DocumentWindowController::new(&event_loop);
+    let pixel_width: u32 = 320;
+    let pixel_height: u32 = 240;
+
+    let mut document_controller = DocumentWindowController::new(&event_loop, pixel_width, pixel_height);
+
+     // Pixels is not ideal; I'd rather be using CG APIs.
+    // But CG-Rust bindings look like a big hassle.
+    // TODO: move this into the DWC once Pixels no longer requires a type parameter that I can't instantiate.
+    let window_size = document_controller.window.inner_size();
+    let surface_texture = SurfaceTexture::new(window_size.width, window_size.height, &document_controller.window);
+
+
+    let mut pixels = match 
+        Pixels::new(pixel_width, pixel_height, surface_texture) {
+            Ok(p) => p,
+            Err(e) => panic!(e),
+        };
 
 
     let mut mouse_position = winit::dpi::PhysicalPosition::new(0.0, 0.0);
@@ -38,15 +56,19 @@ fn main() {
                     }
                     WindowEvent::MouseInput {device_id, state, button, ..} => {
                         if state == ElementState::Pressed && button == MouseButton::Left {
-                            doc.mouse_clicked(mouse_position);
+                            let logical_mouse_pos = mouse_position.to_logical(document_controller.window.scale_factor());
+                            document_controller.mouse_clicked(logical_mouse_pos);
                         }
                     }
                     _ => (),
                 },
                 Event::MainEventsCleared => {
-                    // window.request_redraw();
+                    document_controller.window.request_redraw();
                 },
-                
+                Event::RedrawRequested(window_id) => {
+                    // For now, we only have one window.
+                    document_controller.redraw(&mut pixels);
+                }
                 _ => {}
             }
         });
