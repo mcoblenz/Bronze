@@ -1,7 +1,7 @@
 use objc::{rc::autoreleasepool};
 use winit::{
-    event::{Event, WindowEvent, ElementState, MouseButton},
-    event_loop::ControlFlow,
+    event::*,
+    event_loop::*,
 };
 use pixels::{Error, Pixels, SurfaceTexture};
 
@@ -40,6 +40,7 @@ fn main() {
 
 
     let mut mouse_position = winit::dpi::PhysicalPosition::new(0.0, 0.0);
+    let mut modifiers_state = Default::default();
 
     event_loop.run(move |event, _, control_flow| {
         autoreleasepool(|| {
@@ -53,11 +54,31 @@ fn main() {
                     },
                     WindowEvent::CursorMoved {device_id, position, ..} => {
                         mouse_position = position;
-                    }
+                    },
                     WindowEvent::MouseInput {device_id, state, button, ..} => {
                         if state == ElementState::Pressed && button == MouseButton::Left {
                             let logical_mouse_pos = mouse_position.to_logical(document_controller.window.scale_factor());
                             document_controller.mouse_clicked(logical_mouse_pos);
+                        }
+                    },
+                    WindowEvent::ModifiersChanged(state) => {
+                        modifiers_state = state;
+                    }
+                    WindowEvent::KeyboardInput {device_id, input, is_synthetic} => {
+                        // Command key combinations
+                        if input.state == ElementState::Pressed && modifiers_state & ModifiersState::LOGO != Default::default(){
+                            match input.virtual_keycode {
+                                Some(VirtualKeyCode::Z) => {
+                                    if modifiers_state & ModifiersState::SHIFT == Default::default() {
+                                        document_controller.undo();
+                                    }
+                                    else {
+                                        document_controller.redo();
+                                    }
+                                },
+                                Some (_k) => {}
+                                None => {}
+                            }
                         }
                     }
                     _ => (),

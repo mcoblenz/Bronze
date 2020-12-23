@@ -21,9 +21,10 @@ impl Command for InsertShapeCommand {
     }
 
     fn undo(&mut self) {
-
+        self.document.as_mut().remove_shape(self.shape);
     }
-    fn redo(&mut self) {
 
+    fn redo(&mut self) {
+        self.commit();
     }
 }

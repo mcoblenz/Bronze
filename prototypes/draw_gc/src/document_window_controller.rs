@@ -83,7 +83,7 @@ impl DocumentWindowController {
         let frame = pixels.get_frame();
         let mut count = 0;
         for (i, pixel) in frame.chunks_exact_mut(4).enumerate() {
-            let color = [0, 0xff, 0xff, 0xff];
+            let color = [0xff, 0xff, 0xff, 0xff];
             pixel.copy_from_slice(&color);
             count = count + 4;
         }
@@ -98,4 +98,11 @@ impl DocumentWindowController {
         let render_err = pixels.render();
     }
 
+    pub fn undo(&mut self) {
+        self.undo_manager.undo();
+    }
+    
+    pub fn redo(&mut self) {
+        self.undo_manager.redo();
+    }
 }

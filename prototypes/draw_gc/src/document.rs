@@ -14,6 +14,14 @@ impl Document {
     pub fn add_shape(&mut self, shape: GcRef<Box<dyn Shape>>) {
         self.shapes.push(shape);
     }
+
+    pub fn remove_shape(&mut self, shape: GcRef<Box<dyn Shape>>) {
+        let pos = self.shapes.iter().position(|x| *x == shape);
+        match pos {
+            Some(index) => {self.shapes.remove(index);},
+            None => println!("error: shape not found."),
+        }
+    }
 }
 
 impl GcTrace for Document {}
