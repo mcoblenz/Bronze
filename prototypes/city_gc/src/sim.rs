@@ -11,8 +11,7 @@ pub fn step(grid: &mut Grid) {
             let n = rng.gen_range(0, 5);
             if n == 0 {
                 let new_tile = tile::ZonedTile::new();                
-                let new_tile_box = Box::new(new_tile);
-                *t = Gc::new(new_tile_box);
+                *t = Gc::new(new_tile);
             }
         }
     }

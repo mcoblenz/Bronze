@@ -1,5 +1,4 @@
 use bronze::*;
-use std::mem;
 
 // Lists live in the GC heap but are intended to be referenced from outside.
 pub struct List<T>

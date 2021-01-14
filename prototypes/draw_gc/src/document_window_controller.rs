@@ -1,6 +1,5 @@
 use bronze::*;
 use crate::document::*;
-use crate::shape::*;
 use crate::square::*;
 use crate::insert_shape_command::*;
 use crate::undo_manager::*;
@@ -67,9 +66,7 @@ impl DocumentWindowController {
 
         let square = Square::new(top_left, EDGE_LENGTH);
         
-
-        let square_box = Box::new(square);
-        let mut insert_command = Box::new(InsertShapeCommand::new(Gc::new(*square_box), self.document.gc_ref()));
+        let mut insert_command = Box::new(InsertShapeCommand::new(Gc::new(square), self.document.gc_ref()));
         (*insert_command.as_mut()).commit();
 
         self.undo_manager.push_command(insert_command);
@@ -82,7 +79,7 @@ impl DocumentWindowController {
 
         let frame = pixels.get_frame();
         let mut count = 0;
-        for (i, pixel) in frame.chunks_exact_mut(4).enumerate() {
+        for (_i, pixel) in frame.chunks_exact_mut(4).enumerate() {
             let color = [0xff, 0xff, 0xff, 0xff];
             pixel.copy_from_slice(&color);
             count = count + 4;
@@ -96,6 +93,7 @@ impl DocumentWindowController {
         }
 
         let render_err = pixels.render();
+        assert!(render_err.is_ok())
     }
 
     pub fn undo(&mut self) {

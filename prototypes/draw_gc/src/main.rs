@@ -3,11 +3,10 @@ use winit::{
     event::*,
     event_loop::*,
 };
-use pixels::{Error, Pixels, SurfaceTexture};
+use pixels::{Pixels, SurfaceTexture};
 
 mod document_window_controller;
 mod document;
-mod document_view;
 mod shape;
 mod square;
 mod undo_manager;
@@ -47,15 +46,15 @@ fn main() {
             *control_flow = ControlFlow::Poll;
 
             match event {
-                Event::WindowEvent { window_id, event } => match event {
+                Event::WindowEvent { window_id: _, event } => match event {
                     WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
-                    WindowEvent::Resized(size) => {
+                    WindowEvent::Resized(_size) => {
                         //layer.set_drawable_size(CGSize::new(size.width as f64, size.height as f64));
                     },
-                    WindowEvent::CursorMoved {device_id, position, ..} => {
+                    WindowEvent::CursorMoved {device_id: _, position, ..} => {
                         mouse_position = position;
                     },
-                    WindowEvent::MouseInput {device_id, state, button, ..} => {
+                    WindowEvent::MouseInput {device_id: _, state, button, ..} => {
                         if state == ElementState::Pressed && button == MouseButton::Left {
                             let logical_mouse_pos = mouse_position.to_logical(document_controller.window.scale_factor());
                             document_controller.mouse_clicked(logical_mouse_pos);
@@ -64,7 +63,7 @@ fn main() {
                     WindowEvent::ModifiersChanged(state) => {
                         modifiers_state = state;
                     }
-                    WindowEvent::KeyboardInput {device_id, input, is_synthetic} => {
+                    WindowEvent::KeyboardInput {device_id: _, input, is_synthetic: _} => {
                         // Command key combinations
                         if input.state == ElementState::Pressed && modifiers_state & ModifiersState::LOGO != Default::default(){
                             match input.virtual_keycode {
@@ -86,7 +85,7 @@ fn main() {
                 Event::MainEventsCleared => {
                     document_controller.window.request_redraw();
                 },
-                Event::RedrawRequested(window_id) => {
+                Event::RedrawRequested(_window_id) => {
                     // For now, we only have one window.
                     document_controller.redraw(&mut pixels);
                 }

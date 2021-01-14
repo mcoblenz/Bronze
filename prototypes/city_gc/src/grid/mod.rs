@@ -7,21 +7,20 @@ use bronze::Gc;
 pub mod tile;
 
 pub struct Grid {
-    pub rows: Vec<Vec<GcRef<Box<dyn tile::Tile>>>>
+    pub rows: Vec<Vec<GcRef<dyn tile::Tile>>>
 }
 
 impl Grid {
     pub fn new(num_rows: usize, num_cols: usize) -> Grid {
-        let mut rows: Vec<Vec<GcRef<Box<dyn tile::Tile>>>> = Vec::new();
+        let mut rows: Vec<Vec<GcRef<dyn tile::Tile>>> = Vec::new();
 
         for _r in 0..num_rows {
             // Interestingly, if I remove this type annotation, the line below won't typecheck!
             // ^^^ expected trait object `dyn grid::tile::Tile`, found struct `grid::tile::EmptyTile`
-            let mut row: Vec<GcRef<Box<dyn tile::Tile>>> = Vec::new();
+            let mut row: Vec<GcRef<dyn tile::Tile>> = Vec::new();
             for _c in 0..num_cols {
                 let tile = tile::EmptyTile{};
-                let tile_box = Box::new(tile);
-                let gc_tile: bronze::GcRef<Box<dyn tile::Tile>> = Gc::new(tile_box);
+                let gc_tile: bronze::GcRef<dyn tile::Tile> = Gc::new(tile);
                 row.push(gc_tile);
             }
             rows.push(row);
