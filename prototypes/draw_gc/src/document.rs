@@ -3,7 +3,7 @@ use bronze::*;
 use std::vec::Vec;
 
 pub struct Document {
-    pub shapes: Vec<GcRef<Box<dyn Shape>>>,
+    pub shapes: Vec<GcRef<dyn Shape>>,
 }
 
 impl Document {
@@ -11,11 +11,11 @@ impl Document {
         Document {shapes: Vec::new()}
     }
 
-    pub fn add_shape(&mut self, shape: GcRef<Box<dyn Shape>>) {
+    pub fn add_shape(&mut self, shape: GcRef<dyn Shape>) {
         self.shapes.push(shape);
     }
 
-    pub fn remove_shape(&mut self, shape: GcRef<Box<dyn Shape>>) {
+    pub fn remove_shape(&mut self, shape: GcRef<dyn Shape>) {
         let pos = self.shapes.iter().position(|x| *x == shape);
         match pos {
             Some(index) => {self.shapes.remove(index);},

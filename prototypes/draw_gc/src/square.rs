@@ -1,5 +1,6 @@
 use crate::shape::*;
 use crate::graphics_context::*;
+use bronze::*;
 
 pub struct Square {
     top_left: Point,
@@ -21,4 +22,7 @@ impl Shape for Square {
     fn draw (&self, graphics_context: &mut GraphicsContext) {
         graphics_context.draw_rect(self.top_left, self.edge_length, self.edge_length, [0, 0x0, 0xff, 0xff]);
     }
+}
+
+impl GcTrace for Square {
 }

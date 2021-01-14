@@ -66,10 +66,10 @@ impl DocumentWindowController {
         let top_left = Point{x: position.x - (EDGE_LENGTH / 2.0), y: position.y - (EDGE_LENGTH / 2.0)};
 
         let square = Square::new(top_left, EDGE_LENGTH);
-        let square_box = Box::new(square);
+        
 
-        // Note usage of handle rather than a ref, because the command is in the Rust heap
-        let mut insert_command = Box::new(InsertShapeCommand::new(Gc::new(square_box), self.document.gc_ref()));
+        let square_box = Box::new(square);
+        let mut insert_command = Box::new(InsertShapeCommand::new(Gc::new(*square_box), self.document.gc_ref()));
         (*insert_command.as_mut()).commit();
 
         self.undo_manager.push_command(insert_command);

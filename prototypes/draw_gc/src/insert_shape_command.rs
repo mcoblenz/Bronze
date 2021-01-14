@@ -5,12 +5,12 @@ use crate::command::Command;
 use crate::document::*;
 
 pub struct InsertShapeCommand { 
-    shape: GcRef<Box<dyn Shape>>,
+    shape: GcRef<dyn Shape>,
     document: GcRef<Document>,
 }
 
 impl InsertShapeCommand {
-    pub fn new(shape: GcRef<Box<dyn Shape>>, document: GcRef<Document>) -> Self {
+    pub fn new(shape: GcRef<dyn Shape>, document: GcRef<Document>) -> Self {
         InsertShapeCommand {shape, document}
     }
 }

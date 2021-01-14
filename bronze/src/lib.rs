@@ -1,10 +1,17 @@
+#![feature(coerce_unsized)]
+#![feature(unsize)]
+
 use std::marker::PhantomData;
 use std::ptr::NonNull;
 use std::cell::RefCell;
-use std::collections::HashSet;
+use multiset::HashMultiSet;
 use std::boxed::Box;
 use std::mem;
-use core::ops::Deref;
+use core::ops::{Deref};
+
+use core::ops::CoerceUnsized;
+use std::marker::Unsize;
+
 
 pub trait GcTrace {
 
@@ -165,6 +172,12 @@ impl<T: GcTrace + ?Sized + std::fmt::Display> std::fmt::Display for GcRef<T> {
         unsafe {(self.obj_ref).as_ref().data.fmt(f)}
     }
 }
+
+// See https://github.com/rust-lang/rust/issues/27732
+impl<T, U> CoerceUnsized<GcRef<U>> for GcRef<T> 
+    where T: Unsize<U> + GcTrace + ?Sized,
+    U: GcTrace + ?Sized 
+    {}
 
 //===================== GcNullableRef =================
 
@@ -327,12 +340,12 @@ impl<T: GcTrace + Sized> Drop for GcHandle<T> {
 
 // Master list of all roots, for use in doing tracing.
 pub struct GcRoots {
-    roots: HashSet<GcUntypedRoot>,
+    roots: HashMultiSet<GcUntypedRoot>,
 }
 
 impl GcRoots {
     fn new() -> Self {
-        GcRoots {roots: HashSet::new()}
+        GcRoots {roots: HashMultiSet::new()}
     }
 
     fn add_root(&mut self, root: GcUntypedRoot) {
@@ -377,6 +390,12 @@ impl<T: GcTrace> Gc<T> {
         GcBox::ref_from_ptr(gc_box)
     }
 
+    // pub fn new_dyn(b: T) -> GcRef<dyn T> {
+    //     let gc_box = GcBox::new(b);
+    //     GcBox::ref_from_ptr(gc_box)
+    // }
+
+
     pub fn new_nullable(b: T) -> GcNullableRef<T> {
         let gc_box = GcNullableBox::new(b);
         GcNullableBox::ref_from_ptr(gc_box)
@@ -419,6 +438,34 @@ mod tests {
         assert_eq!(*moved_handle, 42);
     }
 
+
+    pub trait Shape {}
+    struct Square {}
+    impl Shape for Square {}
+    impl GcTrace for Square {}
+    impl GcTrace for dyn Shape {}
+
+    fn take_shape(_shape: GcRef<dyn Shape>) {}
+
+    fn take_shape_box(_shape: Box<dyn Shape>) {}
+
+
+    #[test]
+    fn unsize_test() {
+        let sq = Square{};
+
+        let gc_square = Gc::new(sq);
+        take_shape(gc_square);
+    }
+
+    fn box_test() {
+        let sq = Square{};
+        let b = Box::new(sq);
+
+        take_shape_box(b);
+    }
+
+    #[test]
     fn roots() {
         assert_eq!(roots_len(), 0);
         let num_gc_ref = Gc::new(42);
@@ -435,6 +482,7 @@ mod tests {
         {
             // Two handles for the same object.
             let num_handle = GcHandle::new(num_gc_ref);
+            assert_eq!(roots_len(), 1);
             let num_handle2 = GcHandle::new(num_gc_ref);
             assert_eq!(roots_len(), 2);
         }
