@@ -1,5 +1,11 @@
+#![allow(non_upper_case_globals)]
+#![allow(non_camel_case_types)]
+#![allow(non_snake_case)]
 #![feature(coerce_unsized)]
 #![feature(unsize)]
+
+include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
+
 
 use std::marker::PhantomData;
 use std::ptr::NonNull;
@@ -11,6 +17,9 @@ use core::ops::{Deref};
 
 use core::ops::CoerceUnsized;
 use std::marker::Unsize;
+
+use std::include;
+
 
 
 pub trait GcTrace {
@@ -269,6 +278,8 @@ impl std::cmp::PartialEq for GcMaybeNullableRoot {
     }
 }
 
+impl Copy for GcMaybeNullableRoot {}
+
 #[derive(Hash, Debug)]
 pub struct GcUntypedRoot {
     gc_ref: GcMaybeNullableRoot,
@@ -276,7 +287,6 @@ pub struct GcUntypedRoot {
 
 impl GcUntypedRoot {
     pub fn new(gc_ref: NonNull<GcBox<dyn GcTrace>>) -> Self {
-        // Transmute here lets us ignore the lifetime of T.
         GcUntypedRoot{gc_ref: GcMaybeNullableRoot::BoxRef (gc_ref)}
     }
 }
@@ -296,10 +306,14 @@ impl Clone for GcUntypedRoot {
     }
 }
 
+impl Copy for GcUntypedRoot {}
+
 // GcHandle is Move, not Copy.
 // GcHandle represents a reference from linear Rust code to the GC heap.
-pub struct GcHandle<T: GcTrace + 'static> {
+#[derive(std::cmp::Eq)]
+pub struct GcHandle<T: GcTrace + 'static + ?Sized> {
     gc_ref: GcRef<T>,
+    untyped_root: GcUntypedRoot,
 }
 
 //If you have a GcHandle, you can borrow a 
@@ -308,16 +322,30 @@ pub struct GcHandle<T: GcTrace + 'static> {
 // (so that you can't borrow a second mutable reference).
 impl<T: GcTrace> GcHandle<T> {
     pub fn new(gc_ref: GcRef<T>) -> GcHandle<T> {
+        let untyped_root = GcUntypedRoot::new(gc_ref.obj_ref);
+
         ROOTS.with(|roots| {
-            let untyped_root = GcUntypedRoot::new(gc_ref.obj_ref);
             (*roots.borrow_mut()).add_root(untyped_root);
         });
 
-        GcHandle {gc_ref}
+        GcHandle {gc_ref, untyped_root}
     }
 
     pub fn gc_ref(&self) -> GcRef<T> {
         self.gc_ref
+    }
+}
+
+impl<T: GcTrace + ?Sized> GcHandle<T> {
+    // "as_ref" is used to obtain a reference to the underlying data.
+    pub fn as_ref<'a>(&'a self) -> &'a T {
+        unsafe {
+            self.gc_ref.as_ref()
+        }
+    }
+
+    pub fn as_mut<'a>(&'a mut self) -> &'a mut T {
+        self.gc_ref.as_mut()
     }
 }
 
@@ -329,14 +357,30 @@ impl<T: GcTrace> Deref for GcHandle<T> {
     }
 }
 
-impl<T: GcTrace + Sized> Drop for GcHandle<T> {
+impl<T: GcTrace + ?Sized> Drop for GcHandle<T> {
     fn drop(&mut self) { 
         ROOTS.with(|roots| {
-            let untyped_root = GcUntypedRoot::new(self.gc_ref.obj_ref);
-            roots.borrow_mut().drop_root(untyped_root);
+            // let trace_ref = self.gc_ref as GcRef<dyn GcTrace>;
+
+
+            // let obj_ref: NonNull<GcBox<T>> = self.gc_ref.obj_ref;
+            // let trace_ref = obj_ref as NonNull<GcBox<dyn GcTrace>>;
+            // let untyped_root = GcUntypedRoot::new(trace_ref.obj_ref);
+            roots.borrow_mut().drop_root(self.untyped_root);
         });
      }
 }
+
+impl<T: ?Sized + GcTrace> PartialEq for GcHandle<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.gc_ref == other.gc_ref
+    }
+}
+
+impl<T, U> CoerceUnsized<GcHandle<U>> for GcHandle<T> 
+    where T: Unsize<U> + GcTrace + ?Sized,
+    U: GcTrace + ?Sized 
+    {}
 
 // Master list of all roots, for use in doing tracing.
 pub struct GcRoots {
@@ -386,15 +430,19 @@ pub struct Gc<T: ?Sized> {
 
 impl<T: GcTrace> Gc<T> {
     pub fn new(b: T) -> GcRef<T> {
+        unsafe {
+            bronze_init();
+            println!("gc root chain: {:?}", llvm_gc_root_chain_bronze_ref);
+        }
+
         let gc_box = GcBox::new(b);
         GcBox::ref_from_ptr(gc_box)
     }
 
-    // pub fn new_dyn(b: T) -> GcRef<dyn T> {
-    //     let gc_box = GcBox::new(b);
-    //     GcBox::ref_from_ptr(gc_box)
-    // }
-
+    pub fn new_handle(b: T) -> GcHandle<T> {
+        let gcRef = Self::new(b);
+        GcHandle::new(gcRef)
+    }
 
     pub fn new_nullable(b: T) -> GcNullableRef<T> {
         let gc_box = GcNullableBox::new(b);
@@ -449,7 +497,6 @@ mod tests {
 
     fn take_shape_box(_shape: Box<dyn Shape>) {}
 
-
     #[test]
     fn unsize_test() {
         let sq = Square{};
@@ -458,6 +505,7 @@ mod tests {
         take_shape(gc_square);
     }
 
+    #[test]
     fn box_test() {
         let sq = Square{};
         let b = Box::new(sq);
