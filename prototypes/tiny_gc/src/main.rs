@@ -4,7 +4,9 @@ trait ATrait {
     fn doit(&self);
 }
 
-struct AStruct {}
+struct AStruct {
+    data: i32,
+}
 
 impl ATrait for AStruct {
     fn doit(&self) {
@@ -15,8 +17,12 @@ impl ATrait for AStruct {
 impl GcTrace for AStruct {}
 
 
+pub struct LittleBox<T: GcTrace + ?Sized + 'static> {
+    data: T,
+}
+
 fn main() {
-    let b = Gc::new(AStruct {});
-    b.as_ref().doit();
+    let a = Gc::new(AStruct {data: 42});
+    let b = Gc::new(AStruct {data: 42});
 
 }

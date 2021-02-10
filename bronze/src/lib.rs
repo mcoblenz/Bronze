@@ -72,8 +72,8 @@ impl<T: GcTrace + 'static> GcNullableBox<T> {
 impl<T: GcTrace> GcBox<T> {
     pub fn new(data: T) -> NonNull<Self> {
         let bx = Box::new(GcBox {data});
-        let bx_ptr = Box::into_raw(bx);
 
+        let bx_ptr = Box::into_raw(bx);
         unsafe {NonNull::new_unchecked(bx_ptr)}
     }
 }
@@ -95,6 +95,12 @@ impl<T: GcTrace + ?Sized> GcBox<T> {
 
     pub fn as_mut(&mut self) -> &mut T {
         &mut self.data
+    }
+}
+
+impl<T: GcTrace + ?Sized> Drop for GcBox<T> {
+    fn drop(&mut self) {
+        println!("deallocating a GcBox.");
     }
 }
 
@@ -431,8 +437,8 @@ pub struct Gc<T: ?Sized> {
 impl<T: GcTrace> Gc<T> {
     pub fn new(b: T) -> GcRef<T> {
         unsafe {
-            bronze_init();
-            println!("gc root chain: {:?}", llvm_gc_root_chain_bronze_ref);
+            bronze_init(); // TODO: move this so it only happens once
+            trace_roots();
         }
 
         let gc_box = GcBox::new(b);
@@ -535,5 +541,36 @@ mod tests {
             assert_eq!(roots_len(), 2);
         }
         assert_eq!(roots_len(), 0);
+    }
+}
+
+
+
+fn trace_roots() {
+    unsafe {
+        let mut stack_entry = llvm_gc_root_chain_bronze_ref;
+        while !stack_entry.is_null() {
+            let frame_map = (*stack_entry).Map;
+            println!("stack entry");
+            if !frame_map.is_null() {
+                let num_roots = (*frame_map).NumRoots; 
+                println!("{} roots found in this frame map", num_roots);
+                let roots = (*stack_entry).Roots.as_slice(num_roots as usize);
+
+                let num_meta = (*frame_map).NumMeta;
+                let meta = (*frame_map).Meta.as_slice(num_meta as usize);
+
+                assert!(num_meta == num_roots, "Every root must have metadata; otherwise we won't know how to trace some roots.");
+
+                for i in 0..num_roots as usize {
+                    let root = roots[i];
+                    let meta = meta[i];
+
+                    println!("root {:p} meta: {:?}", root, meta);
+
+                }
+            }
+            stack_entry = (*stack_entry).Next;
+        }
     }
 }
