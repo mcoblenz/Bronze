@@ -22,11 +22,17 @@ use std::include;
 
 
 
-pub trait GcTrace {
-
+pub unsafe trait GcTrace {
+    unsafe fn trace(&self);
 }
 
-impl GcTrace for u32 {}
+unsafe impl GcTrace for u32 {
+    unsafe fn trace(&self) {}
+}
+
+unsafe impl GcTrace for i32 {
+    unsafe fn trace(&self) {}
+}
 
 /*
 * I want the following kinds of references to Gc objects:
@@ -165,8 +171,10 @@ impl<T: GcTrace + ?Sized> Clone for GcRef<T> {
 
 impl<T: GcTrace + ?Sized + 'static> Copy for GcRef<T> {}
 
-impl<T: GcTrace + ?Sized> GcTrace for GcRef<T> {
-    // TODO
+unsafe impl<T: GcTrace + ?Sized> GcTrace for GcRef<T> {
+    unsafe fn trace(&self) {
+        // TODO
+    }
 }
 
 
@@ -235,10 +243,13 @@ impl<T: GcTrace> GcNullableRef<T> {
     }
 }
 
-impl<T: GcTrace + ?Sized + 'static> Copy for GcNullableRef<T> {}
+impl<T: GcTrace + ?Sized + 'static> Copy for GcNullableRef<T> {
+}
 
-impl<T: GcTrace + ?Sized> GcTrace for GcNullableRef<T> {
-    // TODO
+unsafe impl<T: GcTrace + ?Sized> GcTrace for GcNullableRef<T> {
+    unsafe fn trace(&self) {
+        // TODO
+    }
 }
 
 
@@ -457,7 +468,11 @@ impl<T: GcTrace> Gc<T> {
 }
 
 // TODO
-impl<T: GcTrace + ?Sized> GcTrace for Box<T> {}
+unsafe impl<T: GcTrace + ?Sized> GcTrace for Box<T> {
+    unsafe fn trace(&self) {
+        // TODO
+    }
+}
 
 
 #[cfg(test)]
@@ -496,8 +511,14 @@ mod tests {
     pub trait Shape {}
     struct Square {}
     impl Shape for Square {}
-    impl GcTrace for Square {}
-    impl GcTrace for dyn Shape {}
+    
+    unsafe impl GcTrace for Square {
+        unsafe fn trace(&self) {}
+    }
+    
+    unsafe impl GcTrace for dyn Shape {
+        unsafe fn trace(&self) {}
+    }
 
     fn take_shape(_shape: GcRef<dyn Shape>) {}
 

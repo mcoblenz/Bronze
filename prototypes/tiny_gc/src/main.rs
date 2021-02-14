@@ -1,9 +1,11 @@
 use bronze::*;
+use bronze_derive::*;
 
 trait ATrait {
     fn doit(&self);
 }
 
+#[derive(Trace)]
 struct AStruct {
     data: i32,
 }
@@ -12,13 +14,6 @@ impl ATrait for AStruct {
     fn doit(&self) {
         println!("Hello, world!");
     }
-}
-
-impl GcTrace for AStruct {}
-
-
-pub struct LittleBox<T: GcTrace + ?Sized + 'static> {
-    data: T,
 }
 
 fn main() {

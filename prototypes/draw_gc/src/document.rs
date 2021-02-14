@@ -1,11 +1,13 @@
 use crate::shape::*;
 use bronze::*;
+use bronze_derive::*;
 use std::vec::Vec;
 
 pub struct Document {
     pub shapes: Vec<GcRef<dyn Shape>>,
 }
 
+#[derive(Trace)]
 impl Document {
     pub fn new() -> Self {
         Document {shapes: Vec::new()}
@@ -24,4 +26,3 @@ impl Document {
     }
 }
 
-impl GcTrace for Document {}

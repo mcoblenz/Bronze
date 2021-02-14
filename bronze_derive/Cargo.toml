@@ -1,0 +1,21 @@
+[package]
+name = "bronze_derive"
+version = "0.0.1"
+authors = ["Michael Coblenz <mcoblenz@umd.edu>"]
+
+description = "Garbage collector derive plugin for rust-gc"
+repository = "https://github.com/mcoblenz/Bronze"
+readme = "../README.md"
+license = "MPL-2.0"
+keywords = ["garbage", "macro", "memory"]
+edition = "2018"
+
+[lib]
+name = "bronze_derive"
+proc-macro = true
+
+[dependencies]
+syn = "1.0"
+proc-macro2 = "1.0"
+quote = "1.0"
+synstructure = "0.12"
