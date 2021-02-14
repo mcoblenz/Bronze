@@ -1,4 +1,6 @@
-#[derive(Clone, Copy)]
+use bronze_derive::*;
+
+#[derive(Clone, Copy, Trace)]
 pub struct Point {
     pub x: f64,
     pub y: f64,

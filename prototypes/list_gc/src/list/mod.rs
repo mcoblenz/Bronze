@@ -1,23 +1,37 @@
 use bronze::*;
 
 // Lists live in the GC heap but are intended to be referenced from outside.
+
 pub struct List<T>
-where T: 'static
+where T: 'static + GcTrace
 {
     head: Option<GcNullableRef<Node<T>>>,
 }
 
+unsafe impl<T: GcTrace> GcTrace for List<T> {
+    unsafe fn trace(&self) {
+        match self.head {
+            None => (),
+            Some(n) => n.trace()
+        }
+    }
+}
+
 pub struct Node<T> 
-where T: 'static {
+where T: 'static + GcTrace {
     value: T,
 
     prev: Option<GcNullableRef<Node<T>>>,
     next: Option<GcNullableRef<Node<T>>>,
 }
 
-impl<T> GcTrace for Node<T> {}
+unsafe impl<T: GcTrace> GcTrace for Node<T> {
+    unsafe fn trace(&self) {
+        // TODO. Be careful to avoid infinite loops!
+    }
+}
 
-impl<T> Node<T> {
+impl<T: GcTrace> Node<T> {
     pub fn len(&self) -> usize {
         match self.next {
             None => 1,
@@ -28,9 +42,7 @@ impl<T> Node<T> {
     }
 }
 
-impl<T> GcTrace for List<T> {}
-
-impl<T> List<T> {
+impl<T: GcTrace> List<T> {
     pub fn new() -> GcNullableRef<Self> {
         Gc::new_nullable(List {head: None})
     }

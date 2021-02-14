@@ -1,14 +1,14 @@
 use crate::shape::*;
 use crate::graphics_context::*;
-use bronze::*;
 use bronze_derive::*;
 
+#[derive(Trace)]
 pub struct Square {
     top_left: Point,
     edge_length: f64,
 }
 
-#[derive(Trace)]
+
 impl Square {
     pub fn new(top_left: Point, edge_length: f64) -> Self {
         Square{top_left, edge_length}

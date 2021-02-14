@@ -11,8 +11,13 @@ pub struct Rect {
     pub bottom_right: Point,
 }
 
-#[derive(Trace)]
 pub trait Shape {
     fn bounds(&self) -> Rect;
     fn draw (&self, graphics_context: &mut GraphicsContext);
+}
+
+// TODO: derive this
+unsafe impl GcTrace for dyn Shape {
+    unsafe fn trace(&self) {
+    }
 }

@@ -19,7 +19,7 @@ pub struct DocumentWindowController {
     window_size: winit::dpi::LogicalSize<f64>,
     pixel_width: u32,
     pixel_height: u32,
-    document: GcHandle<Document>,
+    document: GcRef<Document>,
     undo_manager: UndoManager,
 }
 
@@ -52,10 +52,9 @@ impl DocumentWindowController {
 
         let document = Document::new();
         let document_ref = Gc::new(document);
-        let document_handle = GcHandle::new(document_ref);
         let undo_manager = UndoManager::new();
 
-        DocumentWindowController{window, window_size, pixel_width, pixel_height, document: document_handle, undo_manager}
+        DocumentWindowController{window, window_size, pixel_width, pixel_height, document: document_ref, undo_manager}
     }
 
     pub fn mouse_clicked(&mut self, position: winit::dpi::LogicalPosition<f64>) {
@@ -66,7 +65,7 @@ impl DocumentWindowController {
 
         let square = Square::new(top_left, EDGE_LENGTH);
         
-        let mut insert_command = Box::new(InsertShapeCommand::new(Gc::new(square), self.document.gc_ref()));
+        let mut insert_command = Box::new(InsertShapeCommand::new(Gc::new(square), self.document));
         (*insert_command.as_mut()).commit();
 
         self.undo_manager.push_command(insert_command);
@@ -88,7 +87,7 @@ impl DocumentWindowController {
         let mut graphics_context = GraphicsContext::new(frame, self.pixel_width, self.pixel_height, self.window_size);
 
         // Use the painter's algorithm on the shapes.
-        for shape in &self.document.shapes {
+        for shape in &self.document.as_ref().shapes {
             shape.as_ref().draw(&mut graphics_context);
         }
 
