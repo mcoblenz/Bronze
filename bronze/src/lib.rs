@@ -1,8 +1,13 @@
+// Bronze is based in part on code from https://github.com/withoutboats/shifgrethor
+// as well as code from https://github.com/Manishearth/rust-gc
+
+
 #![allow(non_upper_case_globals)]
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
 #![feature(coerce_unsized)]
 #![feature(unsize)]
+#![feature(extern_types)]
 
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
@@ -11,7 +16,6 @@ use std::marker::PhantomData;
 use std::ptr::NonNull;
 use std::cell::{Cell, RefCell};
 use mem::{size_of, transmute_copy};
-use multiset::HashMultiSet;
 use std::boxed::Box;
 use std::mem;
 use core::{num, ops::{Deref}};
@@ -29,6 +33,13 @@ struct GcState {
     threshold: usize,
     nonnull_boxes_start: Option<NonNull<GcNullableBox<dyn GcTrace>>>,
     boxes_start: Option<NonNull<GcBox<dyn GcTrace>>>,
+}
+
+// https://github.com/rust-lang/rfcs/blob/master/text/1861-extern-types.md
+extern {
+    pub type Data;
+    // TODO: Do I need this Vtable type?
+    type Vtable;
 }
 
 pub unsafe trait GcTrace {
@@ -78,6 +89,7 @@ unsafe impl<T: GcTrace> GcTrace for Vec<T> {
 // Based on rust-gc by Manishearth.
 struct GcBoxHeader {
     next: Option<NonNull<GcBox<dyn GcTrace>>>,
+    vtable: *mut Vtable,
 
     // TODO: optimize this by moving this bit elsewhere.
     marked: Cell<bool>,
@@ -85,7 +97,9 @@ struct GcBoxHeader {
 
 // These go on the Gc heap and hold the actual Gc data.
 // GcBoxHeader must occur FIRST so that the GC runtime can find it.
-pub struct GcBox<T: GcTrace + ?Sized + 'static> {
+// T is not declared to be GcTrace here so the coercions work later,
+// but in fact, there is no way to construct a GcBox with a type that isn't GcTrace.
+pub struct GcBox<T: ?Sized + 'static> {
     header: GcBoxHeader,
     data: T,
 }
@@ -117,15 +131,6 @@ impl<T: GcTrace + 'static> GcNullableBox<T> {
     }
 }
 
-// impl<T: GcTrace> GcBox<T> {
-//     pub fn new(data: T) -> NonNull<Self> {
-//         let bx = Box::new(GcBox {data});
-
-//         let bx_ptr = Box::into_raw(bx);
-//         unsafe {NonNull::new_unchecked(bx_ptr)}
-//     }
-// }
-
 impl<T: GcTrace + ?Sized> GcBox<T> {
     pub fn new_ref(&mut self) -> GcRef<T> {
         let ptr: *mut Self = self;
@@ -146,20 +151,45 @@ impl<T: GcTrace + ?Sized> GcBox<T> {
     }
 }
 
-impl<T: GcTrace + ?Sized> Drop for GcBox<T> {
+impl<T: ?Sized> GcBox<T> {
+    pub(crate) unsafe fn trace_inner(&self) {
+        let marked = self.header.marked.get();
+        if !marked {
+            self.header.marked.set(true);
+            // println!("marked box {:p}", self);
+
+            let traceable = self.dyn_data();
+            traceable.trace();
+        }
+    }
+
+
+    fn erased(&self) -> &GcBox<Data> {
+        unsafe {
+            &*(self as *const GcBox<T> as *const GcBox<Data>)
+        }
+    }
+
+    pub fn data(&self) -> &T {
+        &self.data
+    }
+
+    fn dyn_data(&self) -> &dyn GcTrace {
+        unsafe {
+            let object = Object {
+                data: self.erased().data() as *const Data,
+                vtable: self.header.vtable,
+            };
+            mem::transmute::<Object, &dyn GcTrace>(object)
+        }
+    }
+}
+
+impl<T: ?Sized> Drop for GcBox<T> {
     fn drop(&mut self) {
         println!("deallocating a GcBox.");
     }
 }
-
-// impl<T: GcTrace> GcNullableBox<T> {
-//     pub fn new(data: T) -> NonNull<Self> {
-//         let bx = Box::new(GcNullableBox {is_null: false, data});
-//         let bx_ptr = Box::into_raw(bx);
-
-//         unsafe {NonNull::new_unchecked(bx_ptr)}
-//     }
-// }
 
 impl<T: GcTrace + ?Sized> GcNullableBox<T> {
     pub fn new_ref(&mut self) -> GcNullableRef<T> {
@@ -188,6 +218,20 @@ pub struct GcRef<T: GcTrace + ?Sized + 'static> {
     obj_ref: NonNull<GcBox<T>>,
 }
 
+// This corresponds with the memory layout of Rust fat pointers.
+#[repr(C)]
+struct Object {
+    data: *const Data,
+    vtable: *mut Vtable,
+}
+
+fn extract_vtable<T: GcTrace>(data: &T) -> *mut Vtable {
+    unsafe {
+        let obj = data as &dyn GcTrace;
+        mem::transmute::<&dyn GcTrace, Object>(obj).vtable
+    }
+}
+
 impl<T: GcTrace + ?Sized> GcRef<T> {
     // "as_ref" is used to obtain a reference to the underlying data.
     pub fn as_ref<'a>(&'a self) -> &'a T {
@@ -203,6 +247,12 @@ impl<T: GcTrace + ?Sized> GcRef<T> {
             gc_box.as_mut()
         }
     }
+
+    pub(crate) fn as_box<'a> (&'a self) -> &GcBox<T> {
+        unsafe {
+            self.obj_ref.as_ref()
+        }
+    }
 }
 
 impl<T: GcTrace + ?Sized> Clone for GcRef<T> {
@@ -215,7 +265,7 @@ impl<T: GcTrace + ?Sized + 'static> Copy for GcRef<T> {}
 
 unsafe impl<T: GcTrace + ?Sized> GcTrace for GcRef<T> {
     unsafe fn trace(&self) {
-        // TODO
+        self.as_box().trace_inner();
     }
 }
 
@@ -367,35 +417,6 @@ impl Clone for GcUntypedRoot {
 
 impl Copy for GcUntypedRoot {}
 
-// Master list of all roots, for use in doing tracing.
-pub struct GcRoots {
-    roots: HashMultiSet<GcUntypedRoot>,
-}
-
-impl GcRoots {
-    fn new() -> Self {
-        GcRoots {roots: HashMultiSet::new()}
-    }
-
-    fn add_root(&mut self, root: GcUntypedRoot) {
-        println!("Adding root {:?} to roots list.", root);
-        self.roots.insert(root);
-    }
-
-    fn drop_root(&mut self, root: GcUntypedRoot) {
-        self.roots.remove(&root);
-        println!("Dropped root {:?} from roots list.", root)
-    }
-
-    fn len(&self) -> usize {
-        self.roots.len()
-    }
-
-    // TODO
-    fn trace() {
-        todo!();
-    }
-}
 
 // Each thread has its own list of roots, since GC references are neither Send nor Sync.
 thread_local!(static GC_STATE: RefCell<GcState> = RefCell::new(GcState {
@@ -431,16 +452,18 @@ impl<T: GcTrace> Gc<T> {
     pub fn new(b: T) -> GcRef<T> {
         unsafe {
             bronze_init(); // TODO: move this so it only happens once
-            trace_roots();
+            mark();
         }
 
         let nonnull_ptr = GC_STATE.with(|st| {
             let mut st = st.borrow_mut();
 
             // TODO: collect if needed
+            let vtable = extract_vtable(&b);
 
             let header = GcBoxHeader {
                 marked: Cell::new(false),
+                vtable: vtable,
                 next: st.boxes_start.take()
             };
             let bx_ptr = Box::into_raw(Box::new(GcBox {header, data: b}));
@@ -458,16 +481,18 @@ impl<T: GcTrace> Gc<T> {
     pub fn new_nullable(b: T) -> GcNullableRef<T> {
         unsafe {
             bronze_init(); // TODO: move this so it only happens once
-            trace_roots();
+            mark();
         }
 
         let nonnull_ptr = GC_STATE.with(|st| {
             let mut st = st.borrow_mut();
 
             // TODO: collect if needed
+            let vtable = extract_vtable(&b);
 
             let header = GcBoxHeader {
                 marked: Cell::new(false),
+                vtable: vtable,
                 next: st.boxes_start.take()
             };
             let bx_ptr = Box::into_raw(Box::new(GcNullableBox {is_null: false, header, data: b}));
@@ -560,11 +585,32 @@ mod tests {
         assert_eq!(boxes_len(), 2);
         println!("second ref: {:p}", _num_gc_ref_2.obj_ref);
     }
+
+    struct OneRef {
+        r: GcRef<i32>,
+    }
+
+    unsafe impl GcTrace for OneRef {
+        unsafe fn trace(&self) {
+            self.r.trace();
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn one_ref() {
+        assert_eq!(boxes_len(), 0);
+        let num_gc_ref_1 = Gc::new(42);
+        let oneRef_1 = Gc::new(OneRef{r: num_gc_ref_1});
+        let num_gc_ref_2 = Gc::new(42);
+        let oneRef_2 = Gc::new(OneRef{r: num_gc_ref_2});
+        assert_eq!(boxes_len(), 4);
+    }
 }
 
 
-fn trace_roots() {
-    println!("trace_roots");
+fn mark() {
+    println!("mark");
     unsafe { 
         let mut stack_entry = llvm_gc_root_chain_bronze_ref;
         while !stack_entry.is_null() {
@@ -589,10 +635,8 @@ fn trace_roots() {
 
                     if !root.is_null() {
                         // Assumes that the header occurs FIRST in the box!
-                        let root_as_gcboxheader: *mut GcBoxHeader = mem::transmute(root);
-                        let header =  &mut *root_as_gcboxheader;
-                        println!("marking root {:p}", root_as_gcboxheader);
-                        header.marked.set(true);
+                        let root_as_gcbox: *mut GcBox<Data> = mem::transmute(root);
+                        (*root_as_gcbox).trace_inner();
                     }
                 }
             }
