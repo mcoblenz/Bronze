@@ -10,16 +10,17 @@ include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 use std::marker::PhantomData;
 use std::ptr::NonNull;
 use std::cell::{Cell, RefCell};
-use mem::size_of;
+use mem::{size_of, transmute_copy};
 use multiset::HashMultiSet;
 use std::boxed::Box;
 use std::mem;
-use core::ops::{Deref};
+use core::{num, ops::{Deref}};
 
 use core::ops::CoerceUnsized;
 use std::marker::Unsize;
 
 use std::include;
+use serial_test::serial;
 
 const INITIAL_THRESHOLD: usize = 100;
 
@@ -83,6 +84,7 @@ struct GcBoxHeader {
 }
 
 // These go on the Gc heap and hold the actual Gc data.
+// GcBoxHeader must occur FIRST so that the GC runtime can find it.
 pub struct GcBox<T: GcTrace + ?Sized + 'static> {
     header: GcBoxHeader,
     data: T,
@@ -90,9 +92,10 @@ pub struct GcBox<T: GcTrace + ?Sized + 'static> {
 
 // GcNullableBox has a storage cost relative to GcBox, so I
 // don't want to just replace GcBox with GcNullableBox.
+// GcBoxHeader must occur FIRST so that the GC runtime can find it.
 pub struct GcNullableBox<T: GcTrace + ?Sized + 'static> {
-    is_null: bool,
     header: GcBoxHeader,
+    is_null: bool,
     data: T,
 }
 
@@ -395,10 +398,6 @@ impl GcRoots {
 }
 
 // Each thread has its own list of roots, since GC references are neither Send nor Sync.
-// thread_local! {
-//     pub static ROOTS_HEAD: RefCell<GcRoots> = RefCell::new(GcRoots::new());
-// }
-
 thread_local!(static GC_STATE: RefCell<GcState> = RefCell::new(GcState {
     bytes_allocated: 0,
     threshold: INITIAL_THRESHOLD,
@@ -406,11 +405,22 @@ thread_local!(static GC_STATE: RefCell<GcState> = RefCell::new(GcState {
     nonnull_boxes_start: None,
 }));
 
-// pub fn roots_len() -> usize {
-//     ROOTS.with(|roots| {
-//         return (*roots.borrow()).len()
-//     })
-// }
+pub fn boxes_len() -> usize {
+    let mut num_roots  = 0;
+    GC_STATE.with(|st| {
+        let state = st.borrow();
+        let mut a_box = state.boxes_start;
+        while a_box.is_some() {
+            let ptr = a_box.expect("cannot have empty Option here");
+            num_roots = num_roots + 1;
+            unsafe {
+                a_box = ptr.as_ref().header.next;
+            }
+        }
+    });
+
+    num_roots
+}
 
 // This is for prototyping only.
 pub struct Gc<T: ?Sized> {
@@ -481,11 +491,15 @@ unsafe impl<T: GcTrace + ?Sized> GcTrace for Box<T> {
 }
 
 
+// Tests must be run sequentially because the shadow stack implementation does not support concurrency.
+// Unfortunately Rust doesn't support configuring tests to run with only one thread, so we have to use #[serial] on every test!
+// https://github.com/rust-lang/rust/issues/43155
 #[cfg(test)]
 mod tests {
     use crate::*;
 
     #[test]
+    #[serial]
     fn new_ref() {
         let num_ref = Gc::new(42);
         let ref_alias = num_ref;
@@ -500,68 +514,58 @@ mod tests {
     }
 
 
-
-    pub trait Shape {}
-    struct Square {}
-    impl Shape for Square {}
+    // TODO: Re-enable these trait object tests.
+    // pub trait Shape {}
+    // struct Square {}
+    // impl Shape for Square {}
     
-    unsafe impl GcTrace for Square {
-        unsafe fn trace(&self) {}
-    }
+    // unsafe impl GcTrace for Square {
+    //     unsafe fn trace(&self) {}
+    // }
     
-    unsafe impl GcTrace for dyn Shape {
-        unsafe fn trace(&self) {}
-    }
+    // unsafe impl GcTrace for dyn Shape {
+    //     unsafe fn trace(&self) {}
+    // }
 
-    fn take_shape(_shape: GcRef<dyn Shape>) {}
+    // fn take_shape(_shape: GcRef<dyn Shape>) {}
 
-    fn take_shape_box(_shape: Box<dyn Shape>) {}
-
-    #[test]
-    fn unsize_test() {
-        let sq = Square{};
-
-        let gc_square = Gc::new(sq);
-        take_shape(gc_square);
-    }
-
-    #[test]
-    fn box_test() {
-        let sq = Square{};
-        let b = Box::new(sq);
-
-        take_shape_box(b);
-    }
+    // fn take_shape_box(_shape: Box<dyn Shape>) {}
 
     // #[test]
-    // fn roots() {
-    //     assert_eq!(roots_len(), 0);
-    //     let num_gc_ref = Gc::new(42);
-    //     {
-    //         let num_handle = GcHandle::new(num_gc_ref);
-    //         assert_eq!(roots_len(), 1);
-    //         let _moved_handle = num_handle;
-    //         assert_eq!(roots_len(), 1);
-    //     }
+    // fn unsize_test() {
+    //     let sq = Square{};
 
-    //     // Handles are now out of scope, so size should be 0.
-    //     assert_eq!(roots_len(), 0);
-
-    //     {
-    //         // Two handles for the same object.
-    //         let num_handle = GcHandle::new(num_gc_ref);
-    //         assert_eq!(roots_len(), 1);
-    //         let num_handle2 = GcHandle::new(num_gc_ref);
-    //         assert_eq!(roots_len(), 2);
-    //     }
-    //     assert_eq!(roots_len(), 0);
+    //     let gc_square = Gc::new(sq);
+    //     take_shape(gc_square);
     // }
+
+    // #[test]
+    // fn box_test() {
+    //     let sq = Square{};
+    //     let b = Box::new(sq);
+
+    //     take_shape_box(b);
+    // }
+
+
+
+    #[test]
+    #[serial]
+    fn boxes() {
+        assert_eq!(boxes_len(), 0);
+        let _num_gc_ref_1 = Gc::new(42);
+        assert_eq!(boxes_len(), 1);
+        println!("first ref: {:p}", _num_gc_ref_1.obj_ref);
+        let _num_gc_ref_2 = Gc::new(42);
+        assert_eq!(boxes_len(), 2);
+        println!("second ref: {:p}", _num_gc_ref_2.obj_ref);
+    }
 }
 
 
-
 fn trace_roots() {
-    unsafe {
+    println!("trace_roots");
+    unsafe { 
         let mut stack_entry = llvm_gc_root_chain_bronze_ref;
         while !stack_entry.is_null() {
             let frame_map = (*stack_entry).Map;
@@ -569,6 +573,7 @@ fn trace_roots() {
             if !frame_map.is_null() {
                 let num_roots = (*frame_map).NumRoots; 
                 println!("{} roots found in this frame map", num_roots);
+
                 let roots = (*stack_entry).Roots.as_slice(num_roots as usize);
 
                 let num_meta = (*frame_map).NumMeta;
@@ -582,6 +587,13 @@ fn trace_roots() {
 
                     println!("root {:p} meta: {:?}", root, meta);
 
+                    if !root.is_null() {
+                        // Assumes that the header occurs FIRST in the box!
+                        let root_as_gcboxheader: *mut GcBoxHeader = mem::transmute(root);
+                        let header =  &mut *root_as_gcboxheader;
+                        println!("marking root {:p}", root_as_gcboxheader);
+                        header.marked.set(true);
+                    }
                 }
             }
             stack_entry = (*stack_entry).Next;
