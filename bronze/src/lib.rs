@@ -156,7 +156,7 @@ impl<T: ?Sized> GcBox<T> {
         let marked = self.header.marked.get();
         if !marked {
             self.header.marked.set(true);
-            // println!("marked box {:p}", self);
+            println!("marked box {:p}", self);
 
             let traceable = self.dyn_data();
             traceable.trace();
@@ -453,6 +453,8 @@ impl<T: GcTrace> Gc<T> {
         unsafe {
             bronze_init(); // TODO: move this so it only happens once
             mark();
+            sweep();
+            clear_marks();
         }
 
         let nonnull_ptr = GC_STATE.with(|st| {
@@ -474,6 +476,7 @@ impl<T: GcTrace> Gc<T> {
             nonnull_ptr
         });
 
+        println!("allocated box {:p}", nonnull_ptr);
         GcBox::ref_from_ptr(nonnull_ptr)
     }
 
@@ -606,11 +609,26 @@ mod tests {
         let oneRef_2 = Gc::new(OneRef{r: num_gc_ref_2});
         assert_eq!(boxes_len(), 4);
     }
+
+    fn alloc_one_num() {
+        let _num_gc_ref_1 = Gc::new(42);
+    }
+
+    #[test]
+    #[serial]
+    fn collect_one_ref() {
+        assert_eq!(boxes_len(), 0);
+        alloc_one_num();
+
+        // At this point, the stack map should show that the first ref is not a root.
+        // Therefore, it should get collected in the next collection.
+        let num_gc_ref_2 = Gc::new(42);
+    }
 }
 
 
 fn mark() {
-    println!("mark");
+    println!("marking all roots");
     unsafe { 
         let mut stack_entry = llvm_gc_root_chain_bronze_ref;
         while !stack_entry.is_null() {
@@ -643,4 +661,47 @@ fn mark() {
             stack_entry = (*stack_entry).Next;
         }
     }
+}
+
+fn sweep() {
+    GC_STATE.with(|st| {
+
+        let state = st.borrow_mut();
+        let mut a_box = state.boxes_start;
+        while a_box.is_some() {
+            let ptr = a_box.expect("cannot have empty Option here");
+            
+            unsafe {
+                let gc_ref = GcBox::ref_from_ptr(ptr);
+                let gc_box = gc_ref.as_box();
+                println!("sweeping {:p}", gc_box);
+                if !gc_box.header.marked.get() {
+                    println!("Should collect {:p}", gc_box);
+                    // TODO: actually collect the box!
+                }
+
+                a_box = ptr.as_ref().header.next;
+            }
+        }
+    });
+}
+
+fn clear_marks() {
+    GC_STATE.with(|st| {
+
+        let state = st.borrow_mut();
+        let mut a_box = state.boxes_start;
+        while a_box.is_some() {
+            let ptr = a_box.expect("cannot have empty Option here");
+            
+            unsafe {
+                let gc_ref = GcBox::ref_from_ptr(ptr);
+                let gc_box = gc_ref.as_box();
+                gc_box.header.marked.set(false);
+                println!("Cleared mark on {:p}", gc_box);
+
+                a_box = ptr.as_ref().header.next;
+            }
+        }
+    });
 }
