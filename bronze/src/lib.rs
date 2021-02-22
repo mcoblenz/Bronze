@@ -12,10 +12,10 @@
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
 
-use std::marker::PhantomData;
+use std::{marker::PhantomData};
 use std::ptr::NonNull;
 use std::cell::{Cell, RefCell};
-use mem::{size_of, transmute_copy};
+use mem::{size_of};
 use std::boxed::Box;
 use std::mem;
 use core::{num, ops::{Deref}};
@@ -604,9 +604,9 @@ mod tests {
     fn one_ref() {
         assert_eq!(boxes_len(), 0);
         let num_gc_ref_1 = Gc::new(42);
-        let oneRef_1 = Gc::new(OneRef{r: num_gc_ref_1});
+        let _oneRef_1 = Gc::new(OneRef{r: num_gc_ref_1});
         let num_gc_ref_2 = Gc::new(42);
-        let oneRef_2 = Gc::new(OneRef{r: num_gc_ref_2});
+        let _oneRef_2 = Gc::new(OneRef{r: num_gc_ref_2});
         assert_eq!(boxes_len(), 4);
     }
 
@@ -622,10 +622,21 @@ mod tests {
 
         // At this point, the stack map should show that the first ref is not a root.
         // Therefore, it should get collected in the next collection.
-        let num_gc_ref_2 = Gc::new(42);
+        let _num_gc_ref_2 = Gc::new(42);
+    }
+
+    #[test]
+    #[serial]
+    fn collect_two_refs() {
+        assert_eq!(boxes_len(), 0);
+        alloc_one_num();
+        alloc_one_num();
+
+        // At this point, the stack map should show that the first ref is not a root.
+        // Therefore, it should get collected in the next collection.
+        let _num_gc_ref_2 = Gc::new(42);
     }
 }
-
 
 fn mark() {
     println!("marking all roots");
@@ -665,22 +676,42 @@ fn mark() {
 
 fn sweep() {
     GC_STATE.with(|st| {
-
-        let state = st.borrow_mut();
+        let mut state = st.borrow_mut();
         let mut a_box = state.boxes_start;
-        while a_box.is_some() {
-            let ptr = a_box.expect("cannot have empty Option here");
-            
-            unsafe {
-                let gc_ref = GcBox::ref_from_ptr(ptr);
-                let gc_box = gc_ref.as_box();
-                println!("sweeping {:p}", gc_box);
-                if !gc_box.header.marked.get() {
-                    println!("Should collect {:p}", gc_box);
-                    // TODO: actually collect the box!
-                }
+    
+        if a_box.is_some() {
+            let mut prev_box = a_box.expect("cannot have empty Option here").as_ptr();
 
-                a_box = ptr.as_ref().header.next;
+            while a_box.is_some() {
+                let a_box_nonnull_ref = a_box.expect("cannot have empty Option here");
+                let gc_ref = GcBox::ref_from_ptr(a_box_nonnull_ref);
+                let gc_box_ref = gc_ref.as_box();
+                println!("sweeping {:p}", gc_box_ref);
+
+                unsafe {
+                    if !gc_box_ref.header.marked.get() {
+                        println!("Should collect {:p}", gc_box_ref);
+                        let next_box_ref = a_box_nonnull_ref.as_ref().header.next;
+
+                        if prev_box == state.boxes_start.expect("must have at least one box").as_ptr() {
+                            // Deleting the first node.
+                            state.boxes_start = next_box_ref;
+                            println!("deleted the first node")
+                        }
+                        else {
+                            (*prev_box).header.next = next_box_ref;
+                            println!("deleted a node in the middle");
+                        }
+
+                        // Inflating the box will result in Rust freeing it when _inflated_box goes out of scope.
+                        let _inflated_box = Box::from_raw(a_box_nonnull_ref.as_ptr());
+                    }
+                    else {
+                        println!("Not collecting {:p} (it is marked)", gc_box_ref);
+                    }
+                    prev_box = a_box_nonnull_ref.as_ptr();
+                    a_box = a_box_nonnull_ref.as_ref().header.next;
+                }
             }
         }
     });
