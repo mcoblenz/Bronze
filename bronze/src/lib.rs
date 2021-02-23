@@ -12,7 +12,7 @@
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
 
-use std::{marker::PhantomData};
+use std::{marker::PhantomData, ptr::null};
 use std::ptr::NonNull;
 use std::cell::{Cell, RefCell};
 use mem::{size_of};
@@ -27,6 +27,12 @@ use std::include;
 use serial_test::serial;
 
 const INITIAL_THRESHOLD: usize = 100;
+
+// after collection we want the the ratio of used/total to be no
+// greater than this (the threshold grows exponentially, to avoid
+// quadratic behavior when the heap is growing linearly with the
+// number of `new` calls):
+const USED_SPACE_RATIO: f64 = 0.7;
 
 struct GcState {
     bytes_allocated: usize,
@@ -156,7 +162,7 @@ impl<T: ?Sized> GcBox<T> {
         let marked = self.header.marked.get();
         if !marked {
             self.header.marked.set(true);
-            println!("marked box {:p}", self);
+            // println!("marked box {:p}", self);
 
             let traceable = self.dyn_data();
             traceable.trace();
@@ -426,6 +432,7 @@ thread_local!(static GC_STATE: RefCell<GcState> = RefCell::new(GcState {
     nonnull_boxes_start: None,
 }));
 
+#[cfg(test)]
 pub fn boxes_len() -> usize {
     let mut num_roots  = 0;
     GC_STATE.with(|st| {
@@ -450,17 +457,24 @@ pub struct Gc<T: ?Sized> {
 
 impl<T: GcTrace> Gc<T> {
     pub fn new(b: T) -> GcRef<T> {
-        unsafe {
-            bronze_init(); // TODO: move this so it only happens once
-            mark();
-            sweep();
-            clear_marks();
-        }
-
         let nonnull_ptr = GC_STATE.with(|st| {
             let mut st = st.borrow_mut();
 
-            // TODO: collect if needed
+            // Collect if needed. Strategy from Manishearth.
+            if st.bytes_allocated > st.threshold {
+                println!("heap getting too full. Automatic garbage collection triggered.");
+                collect_garbage(&mut st);
+
+                if st.bytes_allocated as f64 > st.threshold as f64 * USED_SPACE_RATIO {
+                    // we didn't collect enough, so increase the
+                    // threshold for next time, to avoid thrashing the
+                    // collector too much/behaving quadratically.
+                    st.threshold = (st.bytes_allocated as f64 / USED_SPACE_RATIO) as usize
+                }
+            }
+
+
+
             let vtable = extract_vtable(&b);
 
             let header = GcBoxHeader {
@@ -476,17 +490,12 @@ impl<T: GcTrace> Gc<T> {
             nonnull_ptr
         });
 
-        println!("allocated box {:p}", nonnull_ptr);
+        // println!("allocated box {:p}", nonnull_ptr);
         GcBox::ref_from_ptr(nonnull_ptr)
     }
 
 
     pub fn new_nullable(b: T) -> GcNullableRef<T> {
-        unsafe {
-            bronze_init(); // TODO: move this so it only happens once
-            mark();
-        }
-
         let nonnull_ptr = GC_STATE.with(|st| {
             let mut st = st.borrow_mut();
 
@@ -519,6 +528,190 @@ unsafe impl<T: GcTrace + ?Sized> GcTrace for Box<T> {
 }
 
 
+pub fn force_collect() {
+    GC_STATE.with(|st| {
+        let mut st = st.borrow_mut();
+        collect_garbage(&mut st);
+    });
+}
+
+unsafe fn gc_root_chain() -> *const LLVMStackEntry {
+    unsafe {
+        bronze_init();
+    }
+    llvm_gc_root_chain_bronze_ref
+}
+
+fn collect_garbage(st: &mut GcState) {
+    fn mark() {
+        println!("marking all roots");
+        unsafe { 
+            let mut stack_entry = gc_root_chain();
+            while !stack_entry.is_null() {
+                let frame_map = (*stack_entry).Map;
+                // println!("stack entry {:p}", stack_entry);
+                if !frame_map.is_null() {
+                    // println!("frame map {:p}", frame_map);
+                    let num_roots = (*frame_map).NumRoots; 
+                    // println!("{} roots found in this frame map", num_roots);
+
+                    let roots = (*stack_entry).Roots.as_slice(num_roots as usize);
+
+                    let num_meta = (*frame_map).NumMeta;
+                    let meta = (*frame_map).Meta.as_slice(num_meta as usize);
+
+                    assert!(num_meta == num_roots, "Every root must have metadata; otherwise we won't know how to trace some roots.");
+
+                    for i in 0..num_roots as usize {
+                        let root = roots[i];
+                        let meta = meta[i];
+
+                        // println!("root {:p} meta: {:?}", root, meta);
+
+                        if !root.is_null() {
+                            // Assumes that the header occurs FIRST in the box!
+                            let root_as_gcbox: *mut GcBox<Data> = mem::transmute(root);
+                            (*root_as_gcbox).trace_inner();
+                        }
+                    }
+                }
+                stack_entry = (*stack_entry).Next;
+            }
+        }
+    }
+
+    fn sweep(state: &mut GcState) {
+        let mut a_box = state.boxes_start;
+    
+        // println!("sweeping");
+
+        if a_box.is_some() {
+            let mut prev_box = a_box.expect("cannot have empty Option here").as_ptr();
+
+            while a_box.is_some() {
+                let a_box_nonnull_ref = a_box.expect("cannot have empty Option here");
+                let gc_ref = GcBox::ref_from_ptr(a_box_nonnull_ref);
+                let gc_box_ref = gc_ref.as_box();
+                // println!("sweeping {:p}", gc_box_ref);
+
+                unsafe {
+                    if !gc_box_ref.header.marked.get() {
+                        // println!("Should collect {:p}", gc_box_ref);
+                        let next_box_ref = a_box_nonnull_ref.as_ref().header.next;
+
+                        if prev_box == state.boxes_start.expect("must have at least one box").as_ptr() {
+                            // Deleting the first node.
+                            state.boxes_start = next_box_ref;
+                            // println!("deleted the first node")
+                        }
+                        else {
+                            (*prev_box).header.next = next_box_ref;
+                            // println!("deleted a node in the middle");
+                        }
+
+
+                        let bytes_freed = mem::size_of_val::<GcBox<_>>(gc_box_ref);
+                        println!("freed {} bytes", bytes_freed);
+                        state.bytes_allocated -= bytes_freed;
+
+                        // Inflating the box will result in Rust freeing it when _inflated_box goes out of scope.
+                        let _inflated_box = Box::from_raw(a_box_nonnull_ref.as_ptr());
+                    }
+                    else {
+                        // println!("Not collecting {:p} (it is marked)", gc_box_ref);
+                    }
+                    prev_box = a_box_nonnull_ref.as_ptr();
+                    a_box = a_box_nonnull_ref.as_ref().header.next;
+                }
+            }
+        }
+    }
+
+
+    fn clear_marks(state: &mut GcState) {
+        let mut a_box = state.boxes_start;
+        while a_box.is_some() {
+            let ptr = a_box.expect("cannot have empty Option here");
+            
+            unsafe {
+                let gc_ref = GcBox::ref_from_ptr(ptr);
+                let gc_box = gc_ref.as_box();
+                gc_box.header.marked.set(false);
+                // println!("Cleared mark on {:p}", gc_box);
+
+                a_box = ptr.as_ref().header.next;
+            }
+        }
+    }
+
+    mark();
+    sweep(st);
+    clear_marks(st);
+}
+
+pub fn print_root_chain() {
+    GC_STATE.with(|st| {
+        let mut state = st.borrow_mut();
+        unsafe { 
+            let mut stack_entry = gc_root_chain();
+            if stack_entry == core::ptr::null_mut() {
+                println!("GC root chain is null");
+            }
+
+            while !stack_entry.is_null() {
+                let frame_map = (*stack_entry).Map;
+                println!("stack entry {:p}: next = {:p}, frame map = {:p}, roots = {:p}", stack_entry, (*stack_entry).Next, (*stack_entry).Map, &(*stack_entry).Roots);
+                if !frame_map.is_null() {
+                    println!("frame map {:p}", frame_map);
+                    let num_roots = (*frame_map).NumRoots; 
+                    println!("    {} roots found in this stack frame map", num_roots);
+
+                    let roots = (*stack_entry).Roots.as_slice(num_roots as usize);
+
+                    let num_meta = (*frame_map).NumMeta;
+                    let meta = (*frame_map).Meta.as_slice(num_meta as usize);
+
+                    assert!(num_meta == num_roots, "Every root must have metadata; otherwise we won't know how to trace some roots.");
+
+                    for i in 0..num_roots as usize {
+                        let root = roots[i];
+                        let meta = meta[i];
+
+                        println!("    root {:p} meta: {:?}", root, meta);
+
+                        // if !root.is_null() {
+                        //     // Assumes that the header occurs FIRST in the box!
+                        //     let root_as_gcbox: *mut GcBox<Data> = mem::transmute(root);
+                        //     (*root_as_gcbox).trace_inner();
+                        // }
+                    }
+                }
+                stack_entry = (*stack_entry).Next;
+            }
+        }
+        println!("=============");
+    
+    });
+}
+
+pub fn alloc_one_num_lifted() {
+    let _num_gc_ref_1 = Gc::new(42);
+    // If I don't collect here, is the shadow stack OK after I return?
+    // force_collect();
+}
+
+pub fn collect_one_ref_lifted() {
+    //assert_eq!(boxes_len(), 0);
+    alloc_one_num_lifted();
+    //let num_gc_ref_1 = Gc::new(42);
+
+
+    // At this point, the stack map should show that the first ref is not a root.
+    // Therefore, it should get collected in the next collection.
+    force_collect();
+}
+
+
 // Tests must be run sequentially because the shadow stack implementation does not support concurrency.
 // Unfortunately Rust doesn't support configuring tests to run with only one thread, so we have to use #[serial] on every test!
 // https://github.com/rust-lang/rust/issues/43155
@@ -538,7 +731,6 @@ mod tests {
 
         assert_eq!(*gc_num_ref, 42);
         assert_eq!(*gc_num_ref2, 42);
-
     }
 
 
@@ -583,10 +775,10 @@ mod tests {
         assert_eq!(boxes_len(), 0);
         let _num_gc_ref_1 = Gc::new(42);
         assert_eq!(boxes_len(), 1);
-        println!("first ref: {:p}", _num_gc_ref_1.obj_ref);
+        // println!("first ref: {:p}", _num_gc_ref_1.obj_ref);
         let _num_gc_ref_2 = Gc::new(42);
         assert_eq!(boxes_len(), 2);
-        println!("second ref: {:p}", _num_gc_ref_2.obj_ref);
+        // println!("second ref: {:p}", _num_gc_ref_2.obj_ref);
     }
 
     struct OneRef {
@@ -620,9 +812,7 @@ mod tests {
         assert_eq!(boxes_len(), 0);
         alloc_one_num();
 
-        // At this point, the stack map should show that the first ref is not a root.
-        // Therefore, it should get collected in the next collection.
-        let _num_gc_ref_2 = Gc::new(42);
+        force_collect();
     }
 
     #[test]
@@ -634,105 +824,7 @@ mod tests {
 
         // At this point, the stack map should show that the first ref is not a root.
         // Therefore, it should get collected in the next collection.
-        let _num_gc_ref_2 = Gc::new(42);
+        let _num_gc_ref_2 = Gc::new(42); // Should NOT get collected.
+        force_collect();
     }
-}
-
-fn mark() {
-    println!("marking all roots");
-    unsafe { 
-        let mut stack_entry = llvm_gc_root_chain_bronze_ref;
-        while !stack_entry.is_null() {
-            let frame_map = (*stack_entry).Map;
-            println!("stack entry");
-            if !frame_map.is_null() {
-                let num_roots = (*frame_map).NumRoots; 
-                println!("{} roots found in this frame map", num_roots);
-
-                let roots = (*stack_entry).Roots.as_slice(num_roots as usize);
-
-                let num_meta = (*frame_map).NumMeta;
-                let meta = (*frame_map).Meta.as_slice(num_meta as usize);
-
-                assert!(num_meta == num_roots, "Every root must have metadata; otherwise we won't know how to trace some roots.");
-
-                for i in 0..num_roots as usize {
-                    let root = roots[i];
-                    let meta = meta[i];
-
-                    println!("root {:p} meta: {:?}", root, meta);
-
-                    if !root.is_null() {
-                        // Assumes that the header occurs FIRST in the box!
-                        let root_as_gcbox: *mut GcBox<Data> = mem::transmute(root);
-                        (*root_as_gcbox).trace_inner();
-                    }
-                }
-            }
-            stack_entry = (*stack_entry).Next;
-        }
-    }
-}
-
-fn sweep() {
-    GC_STATE.with(|st| {
-        let mut state = st.borrow_mut();
-        let mut a_box = state.boxes_start;
-    
-        if a_box.is_some() {
-            let mut prev_box = a_box.expect("cannot have empty Option here").as_ptr();
-
-            while a_box.is_some() {
-                let a_box_nonnull_ref = a_box.expect("cannot have empty Option here");
-                let gc_ref = GcBox::ref_from_ptr(a_box_nonnull_ref);
-                let gc_box_ref = gc_ref.as_box();
-                println!("sweeping {:p}", gc_box_ref);
-
-                unsafe {
-                    if !gc_box_ref.header.marked.get() {
-                        println!("Should collect {:p}", gc_box_ref);
-                        let next_box_ref = a_box_nonnull_ref.as_ref().header.next;
-
-                        if prev_box == state.boxes_start.expect("must have at least one box").as_ptr() {
-                            // Deleting the first node.
-                            state.boxes_start = next_box_ref;
-                            println!("deleted the first node")
-                        }
-                        else {
-                            (*prev_box).header.next = next_box_ref;
-                            println!("deleted a node in the middle");
-                        }
-
-                        // Inflating the box will result in Rust freeing it when _inflated_box goes out of scope.
-                        let _inflated_box = Box::from_raw(a_box_nonnull_ref.as_ptr());
-                    }
-                    else {
-                        println!("Not collecting {:p} (it is marked)", gc_box_ref);
-                    }
-                    prev_box = a_box_nonnull_ref.as_ptr();
-                    a_box = a_box_nonnull_ref.as_ref().header.next;
-                }
-            }
-        }
-    });
-}
-
-fn clear_marks() {
-    GC_STATE.with(|st| {
-
-        let state = st.borrow_mut();
-        let mut a_box = state.boxes_start;
-        while a_box.is_some() {
-            let ptr = a_box.expect("cannot have empty Option here");
-            
-            unsafe {
-                let gc_ref = GcBox::ref_from_ptr(ptr);
-                let gc_box = gc_ref.as_box();
-                gc_box.header.marked.set(false);
-                println!("Cleared mark on {:p}", gc_box);
-
-                a_box = ptr.as_ref().header.next;
-            }
-        }
-    });
 }
