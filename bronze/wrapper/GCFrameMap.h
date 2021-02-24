@@ -19,13 +19,6 @@ struct LLVMStackEntry {
   void *Roots[0];      //< Stack roots (in-place array).
 };
 
-/// The head of the singly-linked list of StackEntries.  Functions push
-///        and pop onto this in their prologue and epilogue.
-///
-/// Since there is only a global list, this technique is not threadsafe.
-// TODO: assign the real llvm_gc_root_chain to this.
-// I'm avoiding naming these the same because doing to confuses LLVM with both a structural type and a nominal type for this global.
-struct LLVMStackEntry *llvm_gc_root_chain_bronze_ref;
 
 /// Calls Visitor(root, meta) for each GC root on the stack.
 ///        root and meta are exactly the values passed to
@@ -49,4 +42,5 @@ struct LLVMStackEntry *llvm_gc_root_chain_bronze_ref;
 //   }
 // }
 
-void bronze_init();
+// Get the head of the global GC root chain.
+struct LLVMStackEntry *get_llvm_gc_root_chain();

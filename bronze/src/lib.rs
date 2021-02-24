@@ -505,8 +505,7 @@ pub fn force_collect() {
 
 fn gc_root_chain() -> *const LLVMStackEntry {
     unsafe {
-        bronze_init();
-        llvm_gc_root_chain_bronze_ref
+        get_llvm_gc_root_chain()
     }
 }
 

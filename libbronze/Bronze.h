@@ -50,4 +50,4 @@ extern struct LLVMStackEntry *llvm_gc_root_chain; // Exported by LLVM
 //   }
 // }
 
-void bronze_init();
+struct LLVMStackEntry *get_llvm_gc_root_chain();
