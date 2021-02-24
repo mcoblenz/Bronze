@@ -147,7 +147,10 @@ unsafe impl<T: GcTrace> GcTrace for Option<T> {
 impl<T: GcTrace> Finalize for Vec<T> {}
 unsafe impl<T: GcTrace> GcTrace for Vec<T> {
     custom_trace!(this, {
+        println!("tracing a vector");
+
         for v in this.iter() {
+            println!("tracing inside a vector");
             mark(v);
         }
     });

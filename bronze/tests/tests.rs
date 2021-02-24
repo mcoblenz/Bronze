@@ -139,18 +139,41 @@ impl Finalize for TrackedAllocation {
     }
 }
 
-fn alloc_one_tracked_obj(tracker: Rc<Cell<u32>>) {
-    let _t = TrackedAllocation::new(tracker);
+fn alloc_one_tracked_obj(tracker: Rc<Cell<u32>>) -> GcRef<TrackedAllocation> {
+    TrackedAllocation::new(tracker)
 }
 
 
 #[test]
 #[serial]
-fn count_allocations() {
+fn one_allocation() {
     let outstanding_allocations = Rc::new(Cell::new(0));
     assert_eq!(outstanding_allocations.as_ref().get(), 0);
-    alloc_one_tracked_obj(outstanding_allocations.clone());
+    n_allocations(1, outstanding_allocations.clone());
     assert_eq!(outstanding_allocations.as_ref().get(), 1);
     force_collect();
     assert_eq!(outstanding_allocations.as_ref().get(), 0);
 }
+
+fn n_allocations(n: u32, tracker: Rc<Cell<u32>>) {
+    println!("n_allocations start");
+    let mut objs = Vec::new();
+
+    for i in 0..n {
+        objs.push(TrackedAllocation::new(tracker.clone()));
+    }
+    println!("n_allocations end");
+
+}
+
+#[test]
+#[serial]
+fn ten_allocations() {
+    let outstanding_allocations = Rc::new(Cell::new(0));
+    assert_eq!(outstanding_allocations.as_ref().get(), 0);
+    n_allocations(10, outstanding_allocations.clone());
+    assert_eq!(outstanding_allocations.as_ref().get(), 10);
+    force_collect();
+    assert_eq!(outstanding_allocations.as_ref().get(), 0);
+}
+
