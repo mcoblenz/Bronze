@@ -18,13 +18,15 @@ use std::cell::{Cell, RefCell};
 use mem::{size_of};
 use std::boxed::Box;
 use std::mem;
-use core::{num, ops::{Deref}};
-
 use core::ops::CoerceUnsized;
 use std::marker::Unsize;
 
 use std::include;
-use serial_test::serial;
+
+mod trace;
+
+//Re-export Finalize and GcTrace.
+pub use crate::trace::{Finalize, GcTrace};
 
 const INITIAL_THRESHOLD: usize = 100;
 
@@ -48,38 +50,8 @@ extern {
     type Vtable;
 }
 
-pub unsafe trait GcTrace {
-    unsafe fn trace(&self);
-}
 
-unsafe impl GcTrace for u32 {
-    unsafe fn trace(&self) {}
-}
 
-unsafe impl GcTrace for i32 {
-    unsafe fn trace(&self) {}
-}
-
-unsafe impl GcTrace for f64 {
-    unsafe fn trace(&self) {}
-}
-
-unsafe impl<T: GcTrace> GcTrace for Option<T> {
-    unsafe fn trace(&self) {
-        match self {
-            None => (),
-            Some(x) => x.trace()
-        }
-    }
-}
-
-unsafe impl<T: GcTrace> GcTrace for Vec<T> {
-    unsafe fn trace(&self) {
-        for x in self {
-            x.trace();
-        }
-    }
-}
 
 
 /*
@@ -269,10 +241,11 @@ impl<T: GcTrace + ?Sized> Clone for GcRef<T> {
 
 impl<T: GcTrace + ?Sized + 'static> Copy for GcRef<T> {}
 
+impl<T: GcTrace + ?Sized> Finalize for GcRef<T> {}
 unsafe impl<T: GcTrace + ?Sized> GcTrace for GcRef<T> {
-    unsafe fn trace(&self) {
-        self.as_box().trace_inner();
-    }
+    custom_trace!(this, {
+        mark(this.as_ref());
+    });
 }
 
 
@@ -344,10 +317,11 @@ impl<T: GcTrace> GcNullableRef<T> {
 impl<T: GcTrace + ?Sized + 'static> Copy for GcNullableRef<T> {
 }
 
+impl<T: GcTrace + ?Sized> Finalize for GcNullableRef<T> {}
 unsafe impl<T: GcTrace + ?Sized> GcTrace for GcNullableRef<T> {
-    unsafe fn trace(&self) {
-        // TODO
-    }
+    custom_trace!(this, {
+        mark(this.as_ref());
+    });
 }
 
 
@@ -432,7 +406,7 @@ thread_local!(static GC_STATE: RefCell<GcState> = RefCell::new(GcState {
     nonnull_boxes_start: None,
 }));
 
-#[cfg(test)]
+// For testing purposes
 pub fn boxes_len() -> usize {
     let mut num_roots  = 0;
     GC_STATE.with(|st| {
@@ -520,12 +494,6 @@ impl<T: GcTrace> Gc<T> {
 
 }
 
-// TODO
-unsafe impl<T: GcTrace + ?Sized> GcTrace for Box<T> {
-    unsafe fn trace(&self) {
-        // TODO
-    }
-}
 
 
 pub fn force_collect() {
@@ -535,11 +503,11 @@ pub fn force_collect() {
     });
 }
 
-unsafe fn gc_root_chain() -> *const LLVMStackEntry {
+fn gc_root_chain() -> *const LLVMStackEntry {
     unsafe {
         bronze_init();
+        llvm_gc_root_chain_bronze_ref
     }
-    llvm_gc_root_chain_bronze_ref
 }
 
 fn collect_garbage(st: &mut GcState) {
@@ -564,7 +532,7 @@ fn collect_garbage(st: &mut GcState) {
 
                     for i in 0..num_roots as usize {
                         let root = roots[i];
-                        let meta = meta[i];
+                        let _meta = meta[i];
 
                         // println!("root {:p} meta: {:?}", root, meta);
 
@@ -609,6 +577,7 @@ fn collect_garbage(st: &mut GcState) {
                             // println!("deleted a node in the middle");
                         }
 
+                        GcTrace::finalize_glue(gc_box_ref.as_ref());
 
                         let bytes_freed = mem::size_of_val::<GcBox<_>>(gc_box_ref);
                         println!("freed {} bytes", bytes_freed);
@@ -651,7 +620,7 @@ fn collect_garbage(st: &mut GcState) {
 
 pub fn print_root_chain() {
     GC_STATE.with(|st| {
-        let mut state = st.borrow_mut();
+        let state = st.borrow_mut();
         unsafe { 
             let mut stack_entry = gc_root_chain();
             if stack_entry == core::ptr::null_mut() {
@@ -692,139 +661,4 @@ pub fn print_root_chain() {
         println!("=============");
     
     });
-}
-
-pub fn alloc_one_num_lifted() {
-    let _num_gc_ref_1 = Gc::new(42);
-    // If I don't collect here, is the shadow stack OK after I return?
-    // force_collect();
-}
-
-pub fn collect_one_ref_lifted() {
-    //assert_eq!(boxes_len(), 0);
-    alloc_one_num_lifted();
-    //let num_gc_ref_1 = Gc::new(42);
-
-
-    // At this point, the stack map should show that the first ref is not a root.
-    // Therefore, it should get collected in the next collection.
-    force_collect();
-}
-
-
-// Tests must be run sequentially because the shadow stack implementation does not support concurrency.
-// Unfortunately Rust doesn't support configuring tests to run with only one thread, so we have to use #[serial] on every test!
-// https://github.com/rust-lang/rust/issues/43155
-#[cfg(test)]
-mod tests {
-    use crate::*;
-
-    #[test]
-    #[serial]
-    fn new_ref() {
-        let num_ref = Gc::new(42);
-        let ref_alias = num_ref;
-        let gc_num_ref = ref_alias.as_ref();
-
-        // GcRef is Copy, so this is fine.
-        let gc_num_ref2 = num_ref.as_ref();
-
-        assert_eq!(*gc_num_ref, 42);
-        assert_eq!(*gc_num_ref2, 42);
-    }
-
-
-    // TODO: Re-enable these trait object tests.
-    // pub trait Shape {}
-    // struct Square {}
-    // impl Shape for Square {}
-    
-    // unsafe impl GcTrace for Square {
-    //     unsafe fn trace(&self) {}
-    // }
-    
-    // unsafe impl GcTrace for dyn Shape {
-    //     unsafe fn trace(&self) {}
-    // }
-
-    // fn take_shape(_shape: GcRef<dyn Shape>) {}
-
-    // fn take_shape_box(_shape: Box<dyn Shape>) {}
-
-    // #[test]
-    // fn unsize_test() {
-    //     let sq = Square{};
-
-    //     let gc_square = Gc::new(sq);
-    //     take_shape(gc_square);
-    // }
-
-    // #[test]
-    // fn box_test() {
-    //     let sq = Square{};
-    //     let b = Box::new(sq);
-
-    //     take_shape_box(b);
-    // }
-
-
-
-    #[test]
-    #[serial]
-    fn boxes() {
-        assert_eq!(boxes_len(), 0);
-        let _num_gc_ref_1 = Gc::new(42);
-        assert_eq!(boxes_len(), 1);
-        // println!("first ref: {:p}", _num_gc_ref_1.obj_ref);
-        let _num_gc_ref_2 = Gc::new(42);
-        assert_eq!(boxes_len(), 2);
-        // println!("second ref: {:p}", _num_gc_ref_2.obj_ref);
-    }
-
-    struct OneRef {
-        r: GcRef<i32>,
-    }
-
-    unsafe impl GcTrace for OneRef {
-        unsafe fn trace(&self) {
-            self.r.trace();
-        }
-    }
-
-    #[test]
-    #[serial]
-    fn one_ref() {
-        assert_eq!(boxes_len(), 0);
-        let num_gc_ref_1 = Gc::new(42);
-        let _oneRef_1 = Gc::new(OneRef{r: num_gc_ref_1});
-        let num_gc_ref_2 = Gc::new(42);
-        let _oneRef_2 = Gc::new(OneRef{r: num_gc_ref_2});
-        assert_eq!(boxes_len(), 4);
-    }
-
-    fn alloc_one_num() {
-        let _num_gc_ref_1 = Gc::new(42);
-    }
-
-    #[test]
-    #[serial]
-    fn collect_one_ref() {
-        assert_eq!(boxes_len(), 0);
-        alloc_one_num();
-
-        force_collect();
-    }
-
-    #[test]
-    #[serial]
-    fn collect_two_refs() {
-        assert_eq!(boxes_len(), 0);
-        alloc_one_num();
-        alloc_one_num();
-
-        // At this point, the stack map should show that the first ref is not a root.
-        // Therefore, it should get collected in the next collection.
-        let _num_gc_ref_2 = Gc::new(42); // Should NOT get collected.
-        force_collect();
-    }
 }

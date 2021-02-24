@@ -7,9 +7,17 @@ links = "libbronze"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+derive = ["bronze_derive"]
+
 [dependencies]
 multiset = "0.0.5"
-serial_test = "0.5.1"
+bronze_derive = { path = "../bronze_derive", version = "0.1.0", optional = true}
+
 
 [build-dependencies]
 bindgen = "0.56.0"
+
+[dev-dependencies]
+bronze_derive = { path = "../bronze_derive", version = "0.1.0" }
+serial_test = "0.5.1"

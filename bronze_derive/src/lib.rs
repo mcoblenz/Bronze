@@ -26,41 +26,40 @@ fn derive_trace(mut s: Structure<'_>) -> proc_macro2::TokenStream {
                 }
                 match *self { #trace_body }
             }
-           
-            // #[inline] fn finalize_glue(&self) {
-            //     #[allow(dead_code)]
-            //     #[inline]
-            //     fn mark<T: ::bronze::GcTrace + ?Sized>(it: &T) {
-            //         :::bronze::GcTrace::finalize_glue(it);
-            //     }
-            //     match *self { #trace_body }
-            //     ::bronze::Finalize::finalize(self);
-            // }
+            #[inline] fn finalize_glue(&self) { 
+                #[allow(dead_code)]
+                #[inline]
+                fn mark<T: ::bronze::GcTrace + ?Sized>(it: &T) {
+                    ::bronze::GcTrace::finalize_glue(it);
+                }
+                match *self { #trace_body }
+                ::bronze::Finalize::finalize(self);
+            }
         },
     );
 
     // We also implement drop to prevent unsafe drop implementations on this
     // type and encourage people to use Finalize. This implementation will
     // call `Finalize::finalize` if it is safe to do so.
-    // let drop_impl = s.unbound_impl(
-    //     quote!(::std::ops::Drop),
-    //     quote! {
-    //         fn drop(&mut self) {
-    //             if ::gc::finalizer_safe() {
-    //                 ::gc::Finalize::finalize(self);
-    //             }
-    //         }
-    //     },
-    // );
+    let drop_impl = s.unbound_impl(
+        quote!(::std::ops::Drop),
+        quote! {
+            fn drop(&mut self) {
+                // if ::bronze::finalizer_safe() {
+                    ::bronze::Finalize::finalize(self);
+                // }
+            }
+        },
+    );
 
     quote! {
         #trace_impl
-        // #drop_impl
+        #drop_impl
     }
 }
 
-// decl_derive!([Finalize] => derive_finalize);
+decl_derive!([Finalize] => derive_finalize);
 
-// fn derive_finalize(s: Structure<'_>) -> proc_macro2::TokenStream {
-//     s.unbound_impl(quote!(::bronze::Finalize), quote!())
-// }
+fn derive_finalize(s: Structure<'_>) -> proc_macro2::TokenStream {
+    s.unbound_impl(quote!(::bronze::Finalize), quote!())
+}
