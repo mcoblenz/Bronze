@@ -165,7 +165,7 @@ impl<T: ?Sized> GcBox<T> {
 
 impl<T: ?Sized> Drop for GcBox<T> {
     fn drop(&mut self) {
-        println!("deallocating a GcBox.");
+        println!("deallocating GcBox {:p}", self);
     }
 }
 
@@ -576,13 +576,12 @@ fn collect_garbage(st: &mut GcState) {
                             // println!("deleted a node in the middle");
                         }
 
-                        GcTrace::finalize_glue(gc_box_ref.as_ref());
-
                         let bytes_freed = mem::size_of_val::<GcBox<_>>(gc_box_ref);
                         println!("freed {} bytes", bytes_freed);
                         state.bytes_allocated -= bytes_freed;
 
                         // Inflating the box will result in Rust freeing it when _inflated_box goes out of scope.
+                        // Freeing the box will call drop(), which will call finalize_glue(), so we don't call finalize separately here.
                         let _inflated_box = Box::from_raw(a_box_nonnull_ref.as_ptr());
                     }
                     else {
