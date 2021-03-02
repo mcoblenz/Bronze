@@ -2,7 +2,7 @@ use crate::shape::*;
 use crate::graphics_context::*;
 use bronze_derive::*;
 
-#[derive(Trace)]
+#[derive(Trace, Finalize)]
 pub struct Square {
     top_left: Point,
     edge_length: f64,

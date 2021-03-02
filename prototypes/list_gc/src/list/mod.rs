@@ -8,14 +8,15 @@ where T: 'static + GcTrace
     head: Option<GcNullableRef<Node<T>>>,
 }
 
-unsafe impl<T: GcTrace> GcTrace for List<T> {
-    unsafe fn trace(&self) {
-        match self.head {
-            None => (),
-            Some(n) => n.trace()
-        }
-    }
-}
+// impl<T: GcTrace + ?Sized> Finalize for GcNullableRef<T> {}
+// unsafe impl<T: GcTrace + ?Sized> GcTrace for GcNullableRef<T> {
+//     custom_trace!(this, {
+//         match this.head {
+//             None => (),
+//             Some(n) => mark(n),
+//         }
+//     });
+// }
 
 pub struct Node<T> 
 where T: 'static + GcTrace {

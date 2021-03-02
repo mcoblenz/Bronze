@@ -1,4 +1,4 @@
-use bronze::GcTrace;
+use bronze::*;
 
 pub trait Command {
     fn commit(&mut self);
@@ -6,7 +6,4 @@ pub trait Command {
     fn redo(&mut self);
 }
 
-unsafe impl GcTrace for dyn Command {
-    unsafe fn trace(&self) {
-    }
-}
+simple_empty_finalize_trace![dyn Command];

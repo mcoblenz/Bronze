@@ -12,14 +12,14 @@
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
 
-use std::{marker::PhantomData, ptr::null};
+use std::{marker::PhantomData};
 use std::ptr::NonNull;
 use std::cell::{Cell, RefCell};
-use mem::{size_of};
 use std::boxed::Box;
 use std::mem;
 use core::ops::CoerceUnsized;
 use std::marker::Unsize;
+use core::ffi::c_void;
 
 use std::include;
 
@@ -27,6 +27,8 @@ mod trace;
 
 //Re-export Finalize and GcTrace.
 pub use crate::trace::{Finalize, GcTrace};
+
+
 
 const INITIAL_THRESHOLD: usize = 100;
 
@@ -165,6 +167,7 @@ impl<T: ?Sized> GcBox<T> {
 
 impl<T: ?Sized> Drop for GcBox<T> {
     fn drop(&mut self) {
+        self.dyn_data().finalize_glue();
         println!("deallocating GcBox {:p}", self);
     }
 }
@@ -464,7 +467,7 @@ impl<T: GcTrace> Gc<T> {
             nonnull_ptr
         });
 
-        // println!("allocated box {:p}", nonnull_ptr);
+        println!("allocated box {:p}", nonnull_ptr);
         GcBox::ref_from_ptr(nonnull_ptr)
     }
 
@@ -509,42 +512,68 @@ fn gc_root_chain() -> *const LLVMStackEntry {
     }
 }
 
+
+fn iterate_roots<F>(f: F) 
+    where F: Fn(*mut c_void, *const u8) {
+    
+    unsafe { 
+        let mut stack_entry = gc_root_chain();
+        while !stack_entry.is_null() {
+            let frame_map = (*stack_entry).Map;
+            // println!("stack entry {:p}", stack_entry);
+            if !frame_map.is_null() {
+                // println!("frame map {:p}", frame_map);
+                let num_roots = (*frame_map).NumRoots; 
+                // println!("{} roots found in this frame map", num_roots);
+
+                let roots = (*stack_entry).Roots.as_slice(num_roots as usize);
+
+                let num_meta = (*frame_map).NumMeta as usize;
+                let meta = (*frame_map).Meta.as_slice(num_meta as usize);
+                // Metadata is only present for "fat" roots, to indicate that they are actually pointers to real root pointers.                    
+
+                for i in 0..num_roots as usize {
+                    let mut root = roots[i];
+                    let meta = 
+                        if i < num_meta {
+                            meta[i]
+                        }
+                        else {
+                            std::ptr::null()
+                        };
+
+                    // println!("root {:p} meta: {:?}", root, meta);
+
+                    if !root.is_null() {
+                        let meta_ptr = meta as usize;
+                        match meta_ptr {
+                            1 => {
+                                // This is a fat pointer, so there's a layer of indirection there.
+                                // Root should be interpreted as a pointer to the real root.
+                                let root_ptr = root as *const *mut c_void;
+                                root = *root_ptr;
+                            },
+                            0 => (), // No metadata here; this is a regular root (just a GcRef)
+                            _ => panic!("Invalid metadata found for root {:p}. meta: {:?}", root, meta)
+                        }
+                        f(root, meta as *const u8);
+                    }
+                }
+            }
+            stack_entry = (*stack_entry).Next;
+        }
+    }
+}
+
 fn collect_garbage(st: &mut GcState) {
     fn mark() {
         println!("marking all roots");
-        unsafe { 
-            let mut stack_entry = gc_root_chain();
-            while !stack_entry.is_null() {
-                let frame_map = (*stack_entry).Map;
-                // println!("stack entry {:p}", stack_entry);
-                if !frame_map.is_null() {
-                    // println!("frame map {:p}", frame_map);
-                    let num_roots = (*frame_map).NumRoots; 
-                    // println!("{} roots found in this frame map", num_roots);
-
-                    let roots = (*stack_entry).Roots.as_slice(num_roots as usize);
-
-                    let num_meta = (*frame_map).NumMeta;
-                    let meta = (*frame_map).Meta.as_slice(num_meta as usize);
-
-                    assert!(num_meta == num_roots, "Every root must have metadata; otherwise we won't know how to trace some roots.");
-
-                    for i in 0..num_roots as usize {
-                        let root = roots[i];
-                        let _meta = meta[i];
-
-                        // println!("root {:p} meta: {:?}", root, meta);
-
-                        if !root.is_null() {
-                            // Assumes that the header occurs FIRST in the box!
-                            let root_as_gcbox: *mut GcBox<Data> = mem::transmute(root);
-                            (*root_as_gcbox).trace_inner();
-                        }
-                    }
-                }
-                stack_entry = (*stack_entry).Next;
+        iterate_roots(|root, _meta| {
+            unsafe {
+                let root_as_gcbox: *mut GcBox<Data> = mem::transmute(root);
+                (*root_as_gcbox).trace_inner();
             }
-        }
+        });
     }
 
     fn sweep(state: &mut GcState) {
@@ -617,46 +646,8 @@ fn collect_garbage(st: &mut GcState) {
 }
 
 pub fn print_root_chain() {
-    GC_STATE.with(|st| {
-        let state = st.borrow_mut();
-        unsafe { 
-            let mut stack_entry = gc_root_chain();
-            if stack_entry == core::ptr::null_mut() {
-                println!("GC root chain is null");
-            }
-
-            while !stack_entry.is_null() {
-                let frame_map = (*stack_entry).Map;
-                println!("stack entry {:p}: next = {:p}, frame map = {:p}, roots = {:p}", stack_entry, (*stack_entry).Next, (*stack_entry).Map, &(*stack_entry).Roots);
-                if !frame_map.is_null() {
-                    println!("frame map {:p}", frame_map);
-                    let num_roots = (*frame_map).NumRoots; 
-                    println!("    {} roots found in this stack frame map", num_roots);
-
-                    let roots = (*stack_entry).Roots.as_slice(num_roots as usize);
-
-                    let num_meta = (*frame_map).NumMeta;
-                    let meta = (*frame_map).Meta.as_slice(num_meta as usize);
-
-                    assert!(num_meta == num_roots, "Every root must have metadata; otherwise we won't know how to trace some roots.");
-
-                    for i in 0..num_roots as usize {
-                        let root = roots[i];
-                        let meta = meta[i];
-
-                        println!("    root {:p} meta: {:?}", root, meta);
-
-                        // if !root.is_null() {
-                        //     // Assumes that the header occurs FIRST in the box!
-                        //     let root_as_gcbox: *mut GcBox<Data> = mem::transmute(root);
-                        //     (*root_as_gcbox).trace_inner();
-                        // }
-                    }
-                }
-                stack_entry = (*stack_entry).Next;
-            }
-        }
-        println!("=============");
-    
+    println!("Root chain: ");
+    iterate_roots(|root, meta| {
+        println!("    root {:p} meta: {:?}", root, meta);
     });
 }

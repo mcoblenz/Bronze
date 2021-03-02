@@ -16,8 +16,4 @@ pub trait Shape {
     fn draw (&self, graphics_context: &mut GraphicsContext);
 }
 
-// TODO: derive this
-unsafe impl GcTrace for dyn Shape {
-    unsafe fn trace(&self) {
-    }
-}
+simple_empty_finalize_trace![dyn Shape];

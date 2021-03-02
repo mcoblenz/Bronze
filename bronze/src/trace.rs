@@ -77,6 +77,7 @@ macro_rules! custom_trace {
     };
 }
 
+#[macro_export]
 macro_rules! simple_empty_finalize_trace {
     ($($T:ty),*) => {
         $(
@@ -144,7 +145,11 @@ unsafe impl<T: GcTrace> GcTrace for Option<T> {
     });
 }
 
-impl<T: GcTrace> Finalize for Vec<T> {}
+impl<T: GcTrace> Finalize for Vec<T> {
+    fn finalize(&self) {
+        println!("finalizing a vector");
+    }
+}
 unsafe impl<T: GcTrace> GcTrace for Vec<T> {
     custom_trace!(this, {
         println!("tracing a vector");

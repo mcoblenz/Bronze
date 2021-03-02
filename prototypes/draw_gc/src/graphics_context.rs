@@ -1,10 +1,12 @@
-use bronze_derive::*;
+use bronze::*;
 
-#[derive(Clone, Copy, Trace)]
+#[derive(Clone, Copy)]
 pub struct Point {
     pub x: f64,
     pub y: f64,
 }
+
+simple_empty_finalize_trace![Point];
 
 pub struct GraphicsContext<'a> {
     pixel_buffer: &'a mut [u8],

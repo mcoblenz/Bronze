@@ -3,7 +3,7 @@ use bronze::*;
 use bronze_derive::*;
 use std::vec::Vec;
 
-#[derive(Trace)]
+#[derive(Trace, Finalize)]
 pub struct Document {
     pub shapes: Vec<GcRef<dyn Shape>>,
 }

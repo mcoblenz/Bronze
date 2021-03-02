@@ -82,9 +82,9 @@ struct OneRef {
 fn one_ref() {
     assert_eq!(boxes_len(), 0);
     let num_gc_ref_1 = Gc::new(42);
-    let _oneRef_1 = Gc::new(OneRef{r: num_gc_ref_1});
+    let _one_ref_1 = Gc::new(OneRef{r: num_gc_ref_1});
     let num_gc_ref_2 = Gc::new(42);
-    let _oneRef_2 = Gc::new(OneRef{r: num_gc_ref_2});
+    let _one_ref_2 = Gc::new(OneRef{r: num_gc_ref_2});
     assert_eq!(boxes_len(), 4);
 }
 
@@ -159,7 +159,7 @@ fn n_allocations(n: u32, tracker: Rc<Cell<u32>>) {
     println!("n_allocations start");
     let mut objs = Vec::new();
 
-    for i in 0..n {
+    for _i in 0..n {
         objs.push(TrackedAllocation::new(tracker.clone()));
     }
     println!("n_allocations end");
