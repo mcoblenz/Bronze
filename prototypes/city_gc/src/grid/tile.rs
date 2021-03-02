@@ -2,7 +2,7 @@ use std::fmt;
 use bronze_derive::*;
 use bronze::*;
 
-#[derive(Trace)]
+#[derive(Trace, Finalize)]
 pub enum DevelopmentLevel {
     Rubble,
     Vacant,
@@ -14,12 +14,12 @@ pub trait Tile: fmt::Display {
     // For now, we render in plaintext only.
 }
 
+impl Finalize for dyn Tile {}
 unsafe impl GcTrace for dyn Tile {
-    unsafe fn trace(&self) {
-    }
+    custom_trace!(this, {});
 }
 
-#[derive(Trace)]
+#[derive(Trace, Finalize)]
 pub struct EmptyTile {}
 
 impl Tile for EmptyTile {
@@ -32,7 +32,7 @@ impl fmt::Display for EmptyTile {
 }
 
 
-#[derive(Trace)]
+#[derive(Trace, Finalize)]
 pub struct ZonedTile {
     pub development_level: DevelopmentLevel,
 }
