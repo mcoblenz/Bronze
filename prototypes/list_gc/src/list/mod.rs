@@ -1,5 +1,6 @@
 use bronze::*;
 
+// Implements a doubly-linked list.
 // Lists live in the GC heap but are intended to be referenced from outside.
 
 pub struct List<T>
@@ -8,15 +9,15 @@ where T: 'static + GcTrace
     head: Option<GcNullableRef<Node<T>>>,
 }
 
-// impl<T: GcTrace + ?Sized> Finalize for GcNullableRef<T> {}
-// unsafe impl<T: GcTrace + ?Sized> GcTrace for GcNullableRef<T> {
-//     custom_trace!(this, {
-//         match this.head {
-//             None => (),
-//             Some(n) => mark(n),
-//         }
-//     });
-// }
+impl<T: GcTrace> Finalize for List<T> {}
+unsafe impl<T: GcTrace> GcTrace for List<T> {
+    custom_trace!(this, {
+        match this.head {
+            None => (),
+            Some(n) => mark(&n),
+        }
+    });
+}
 
 pub struct Node<T> 
 where T: 'static + GcTrace {
@@ -26,10 +27,16 @@ where T: 'static + GcTrace {
     next: Option<GcNullableRef<Node<T>>>,
 }
 
+impl<T: GcTrace> Finalize for Node<T> {}
 unsafe impl<T: GcTrace> GcTrace for Node<T> {
-    unsafe fn trace(&self) {
-        // TODO. Be careful to avoid infinite loops!
-    }
+    custom_trace!(this, {
+        mark(&this.value);
+
+        match this.next {
+            None => (),
+            Some(n) => mark(&n),
+        }
+    });
 }
 
 impl<T: GcTrace> Node<T> {

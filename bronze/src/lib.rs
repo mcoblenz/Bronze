@@ -277,6 +277,7 @@ impl<T, U> CoerceUnsized<GcRef<U>> for GcRef<T>
     {}
 
 //===================== GcNullableRef =================
+// GcNullableRef can't be defined as GcRef<Option<T>> because Option doesn't support unsized types.
 
 // GcRef represents a reference WITHIN the GC heap.
 #[derive(std::cmp::Eq)]
