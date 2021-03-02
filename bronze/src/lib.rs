@@ -167,7 +167,7 @@ impl<T: ?Sized> GcBox<T> {
 
 impl<T: ?Sized> Drop for GcBox<T> {
     fn drop(&mut self) {
-        self.dyn_data().finalize_glue();
+        // Do not call finalize_glue here because the generated drop() already calls finalize.
         println!("deallocating GcBox {:p}", self);
     }
 }
