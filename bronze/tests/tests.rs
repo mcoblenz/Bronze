@@ -166,14 +166,40 @@ fn n_allocations(n: u32, tracker: Rc<Cell<u32>>) {
 
 }
 
+struct TenRefs {
+    r1: GcRef<TrackedAllocation>,
+    r2: GcRef<TrackedAllocation>,
+    r3: GcRef<TrackedAllocation>,
+    r4: GcRef<TrackedAllocation>,
+    r5: GcRef<TrackedAllocation>,
+    r6: GcRef<TrackedAllocation>,
+    r7: GcRef<TrackedAllocation>,
+    r8: GcRef<TrackedAllocation>,
+    r9: GcRef<TrackedAllocation>,
+    r10: GcRef<TrackedAllocation>,
+}
+
 #[test]
 #[serial]
 fn ten_allocations() {
-    let outstanding_allocations = Rc::new(Cell::new(0));
-    assert_eq!(outstanding_allocations.as_ref().get(), 0);
-    n_allocations(10, outstanding_allocations.clone());
-    assert_eq!(outstanding_allocations.as_ref().get(), 10);
+    let tracker = Rc::new(Cell::new(0));
+    assert_eq!(tracker.as_ref().get(), 0);
+
+    let refs = TenRefs{
+        r1: TrackedAllocation::new(tracker.clone()),
+        r2: TrackedAllocation::new(tracker.clone()),
+        r3: TrackedAllocation::new(tracker.clone()),
+        r4: TrackedAllocation::new(tracker.clone()),
+        r5: TrackedAllocation::new(tracker.clone()),
+        r6: TrackedAllocation::new(tracker.clone()),
+        r7: TrackedAllocation::new(tracker.clone()),
+        r8: TrackedAllocation::new(tracker.clone()),
+        r9: TrackedAllocation::new(tracker.clone()),
+        r10: TrackedAllocation::new(tracker.clone()),
+    };
+
+    assert_eq!(tracker.as_ref().get(), 10);
     force_collect();
-    assert_eq!(outstanding_allocations.as_ref().get(), 0);
+    assert_eq!(tracker.as_ref().get(), 0);
 }
 
