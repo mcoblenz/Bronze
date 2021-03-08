@@ -8,6 +8,8 @@
 #![feature(coerce_unsized)]
 #![feature(unsize)]
 #![feature(extern_types)]
+#![feature(gctrace)]
+#![feature(gcfinalize)]
 
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
@@ -26,7 +28,7 @@ use std::include;
 mod trace;
 
 //Re-export Finalize and GcTrace.
-pub use crate::trace::{Finalize, GcTrace};
+pub use core::gc::{Finalize, GcTrace};
 
 
 
@@ -441,6 +443,7 @@ impl<T: GcTrace> Gc<T> {
             // Collect if needed. Strategy from Manishearth.
             if st.bytes_allocated > st.threshold {
                 println!("heap getting too full. Automatic garbage collection triggered.");
+                print_root_chain();
                 collect_garbage(&mut st);
 
                 if st.bytes_allocated as f64 > st.threshold as f64 * USED_SPACE_RATIO {
@@ -535,26 +538,20 @@ fn iterate_roots<F>(f: F)
 
                 for i in 0..num_roots as usize {
                     let mut root = roots[i];
-                    let meta = 
-                        if i < num_meta {
-                            meta[i]
-                        }
-                        else {
-                            std::ptr::null()
-                        };
+                    let meta = meta[i];
 
                     // println!("root {:p} meta: {:?}", root, meta);
 
                     if !root.is_null() {
                         let meta_ptr = meta as usize;
                         match meta_ptr {
-                            1 => {
+                            2 => {
                                 // This is a fat pointer, so there's a layer of indirection there.
                                 // Root should be interpreted as a pointer to the real root.
                                 let root_ptr = root as *const *mut c_void;
                                 root = *root_ptr;
                             },
-                            0 => (), // No metadata here; this is a regular root (just a GcRef)
+                            1 => (), // No metadata here; this is a regular root (just a GcRef)
                             _ => panic!("Invalid metadata found for root {:p}. meta: {:?}", root, meta)
                         }
                         f(root, meta as *const u8);

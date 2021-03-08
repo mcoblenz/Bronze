@@ -12,20 +12,9 @@ use std::sync::atomic::{
 };
 use std::cell::Cell;
 use std::borrow::Borrow;
+use core::gc::{GcTrace, Finalize};
 
-/// The Finalize trait, which needs to be implemented on
-/// garbage-collected objects to define finalization logic.
-pub trait Finalize {
-    fn finalize(&self) {}
-}
 
-pub unsafe trait GcTrace : Finalize {
-    unsafe fn trace(&self);
-
-    /// Runs Finalize::finalize() on this object and all
-    /// contained subobjects
-    fn finalize_glue(&self);
-}
 
 
 // From Manishearth's rust-gc.
