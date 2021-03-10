@@ -8,8 +8,7 @@
 #![feature(coerce_unsized)]
 #![feature(unsize)]
 #![feature(extern_types)]
-#![feature(gctrace)]
-#![feature(gcfinalize)]
+#![feature(bronze_gc)]
 
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
@@ -25,10 +24,12 @@ use core::ffi::c_void;
 
 use std::include;
 
+use std::custom_trace;
+
 mod trace;
 
 //Re-export Finalize and GcTrace.
-pub use core::gc::{Finalize, GcTrace};
+pub use std::gc::{Finalize, GcTrace};
 
 
 

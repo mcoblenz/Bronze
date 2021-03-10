@@ -1,3 +1,5 @@
+#![feature(bronze_gc)]
+
 use std::cell::Cell;
 use std::rc::Rc;
 use backtrace::Backtrace;
@@ -8,7 +10,6 @@ use backtrace::Backtrace;
 use bronze::*;
 use bronze_derive::{Trace, Finalize};
 use serial_test::serial;
-
 
 #[test]
 #[serial]

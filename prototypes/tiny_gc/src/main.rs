@@ -1,3 +1,5 @@
+#![feature(bronze_gc)]
+
 use bronze::*;
 use bronze_derive::*;
 
