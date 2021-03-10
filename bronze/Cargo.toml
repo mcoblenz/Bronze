@@ -9,6 +9,7 @@ links = "libbronze"
 
 [features]
 derive = ["bronze_derive"]
+enable_garbage_collection = []
 
 [dependencies]
 multiset = "0.0.5"

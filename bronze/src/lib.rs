@@ -9,6 +9,7 @@
 #![feature(unsize)]
 #![feature(extern_types)]
 
+#[cfg(feature="enable_garbage_collection")]
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
 
@@ -21,6 +22,7 @@ use core::ops::CoerceUnsized;
 use std::marker::Unsize;
 use core::ffi::c_void;
 
+#[cfg(feature="enable_garbage_collection")]
 use std::include;
 
 mod trace;
@@ -439,6 +441,8 @@ impl<T: GcTrace> Gc<T> {
             let mut st = st.borrow_mut();
 
             // Collect if needed. Strategy from Manishearth.
+
+            #[cfg(feature="enable_garbage_collection")]
             if st.bytes_allocated > st.threshold {
                 println!("heap getting too full. Automatic garbage collection triggered.");
                 collect_garbage(&mut st);
@@ -499,7 +503,7 @@ impl<T: GcTrace> Gc<T> {
 }
 
 
-
+#[cfg(feature="enable_garbage_collection")]
 pub fn force_collect() {
     GC_STATE.with(|st| {
         let mut st = st.borrow_mut();
@@ -507,13 +511,14 @@ pub fn force_collect() {
     });
 }
 
+#[cfg(feature="enable_garbage_collection")]
 fn gc_root_chain() -> *const LLVMStackEntry {
     unsafe {
         get_llvm_gc_root_chain()
     }
 }
 
-
+#[cfg(feature="enable_garbage_collection")]
 fn iterate_roots<F>(f: F) 
     where F: Fn(*mut c_void, *const u8) {
     
@@ -565,7 +570,7 @@ fn iterate_roots<F>(f: F)
         }
     }
 }
-
+#[cfg(feature="enable_garbage_collection")]
 fn collect_garbage(st: &mut GcState) {
     fn mark() {
         println!("marking all roots");
@@ -646,6 +651,7 @@ fn collect_garbage(st: &mut GcState) {
     clear_marks(st);
 }
 
+#[cfg(feature="enable_garbage_collection")]
 pub fn print_root_chain() {
     println!("Root chain: ");
     iterate_roots(|root, meta| {

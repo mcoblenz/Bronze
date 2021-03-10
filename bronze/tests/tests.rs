@@ -97,8 +97,6 @@ fn alloc_one_num() {
 fn collect_one_ref() {
     assert_eq!(boxes_len(), 0);
     alloc_one_num();
-
-    force_collect();
 }
 
 #[test]
@@ -111,7 +109,6 @@ fn collect_two_refs() {
     // At this point, the stack map should show that the first ref is not a root.
     // Therefore, it should get collected in the next collection.
     let _num_gc_ref_2 = Gc::new(42); // Should NOT get collected.
-    force_collect();
 }
 
 
@@ -151,8 +148,6 @@ fn one_allocation() {
     assert_eq!(outstanding_allocations.as_ref().get(), 0);
     n_allocations(1, outstanding_allocations.clone());
     assert_eq!(outstanding_allocations.as_ref().get(), 1);
-    force_collect();
-    assert_eq!(outstanding_allocations.as_ref().get(), 0);
 }
 
 fn n_allocations(n: u32, tracker: Rc<Cell<u32>>) {
@@ -199,7 +194,5 @@ fn ten_allocations() {
     };
 
     assert_eq!(tracker.as_ref().get(), 10);
-    force_collect();
-    assert_eq!(tracker.as_ref().get(), 0);
 }
 
