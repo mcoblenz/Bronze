@@ -16,6 +16,20 @@ impl Campus {
 
         Campus {turtles}
     }
+
+    pub fn size(&self) -> usize {
+        self.turtles.len()
+    }
+
+    pub fn breed_turtles(&mut self, t1_index: usize, t2_index: usize) {
+        let slice = self.turtles.as_slice();
+        let t1 = &slice[t1_index];
+        let t2 = &slice[t2_index];
+
+        let new_turtle = Turtle::breed(&t1, &t2);
+
+        self.turtles.push(new_turtle);
+    }
 }
 
 impl fmt::Debug for Campus {
