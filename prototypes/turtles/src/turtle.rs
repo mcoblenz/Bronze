@@ -1,5 +1,6 @@
 use rand::prelude::*;
 use std::rc::Rc;
+use std::cell::RefCell;
 
 // Chooses bits at random from each of x and y.
 pub fn cross32(x: u32, y: u32) -> u32 {
@@ -41,7 +42,7 @@ pub struct Turtle {
     color: Color,
 
     // Can't just have a vector of children because the children are owned by the campus and they can't have two owners.
-    children: Vec<Rc<Turtle>>,
+    children: Vec<Rc<RefCell<Turtle>>>,
 }
 
 
@@ -72,7 +73,7 @@ impl Turtle {
         }
     }
 
-    pub fn add_child(&mut self, child: Rc<Turtle>) {
+    pub fn add_child(&mut self, child: Rc<RefCell<Turtle>>) {
         self.children.push(child);
     }
 }

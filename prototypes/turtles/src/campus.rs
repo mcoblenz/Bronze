@@ -2,18 +2,19 @@ use crate::turtle::Turtle;
 
 use std::fmt;
 use std::rc::Rc;
+use std::cell::RefCell;
 
 
 // All the turtles live on campus.
 pub struct Campus {
-    turtles: Vec<Rc<Turtle>>,
+    turtles: Vec<Rc<RefCell<Turtle>>>,
 }
 
 impl Campus {
     pub fn new(initial_turtles: u32) -> Campus {
         let mut turtles = Vec::new();
         for _i in 0..initial_turtles {
-            turtles.push(Rc::new(Turtle::spawn()));
+            turtles.push(Rc::new(RefCell::new(Turtle::spawn())));
         }
 
         Campus {turtles}
@@ -24,16 +25,18 @@ impl Campus {
     }
 
     pub fn breed_turtles(&mut self, t1_index: usize, t2_index: usize) {
-        let new_turtle = 
-        {
-            // let slice = self.turtles.as_slice();
-            let t1 = &self.turtles[t1_index];
-            let t2 = &self.turtles[t2_index];
-            Rc::new(Turtle::breed(t1, t2))
-        };
+        // We need to make sure t1 and t2 go out of scope before the last line, because t1 borrows turtles immutably. When t1 gets dropped, it might re-use the borrow, so that needs to happen BEFORE turtles gets borrowed mutably.
+        let new_turtle = {
+            let mut t1 = (*self.turtles[t1_index]).borrow_mut();
+            let mut t2 = (*self.turtles[t2_index]).borrow_mut();
 
-        // self.turtles[t1_index].add_child(new_turtle.clone());
-        // self.turtles[t2_index].add_child(new_turtle.clone());
+            let new_turtle = Rc::new(RefCell::new(Turtle::breed(&t1, &t2)));
+
+            t1.add_child(new_turtle.clone());
+            t2.add_child(new_turtle.clone());
+
+            new_turtle
+        };
 
         self.turtles.push(new_turtle);
     }
