@@ -34,32 +34,44 @@ impl Color {
 }
 
 #[derive(Debug)]
-pub struct Turtle {
+pub struct Turtle<'a> {
     walking_speed: u32,
     swimming_speed: u32,
     color: Color,
+
+    // Can't just have a vector of children because the children are owned by the campus and they can't have two owners.
+    children: Vec<&'a Turtle<'a>>,
 }
 
 
-impl Turtle {
+impl<'a> Turtle<'a> {
     // You normally don't create a new Turtle from nothing; instead, breed
     // two Turtles.
-    pub fn breed(p1: &Turtle, p2: &Turtle) -> Turtle {
+    // Lifetimes are critical and tricky here!
+    // The output lifetime doesn't depend on the lifetimes
+    // of the parameters.
+    pub fn breed(p1: &Turtle, p2: &Turtle) -> Turtle<'a> {
         Turtle {
             walking_speed: cross32(p1.walking_speed, p2.walking_speed),
             swimming_speed: cross32(p1.swimming_speed, p2.swimming_speed),
-            color: Color::cross(&p1.color, &p2.color)
+            color: Color::cross(&p1.color, &p2.color),
+            children: Vec::new()
         }
     }
 
     // This is for use when creating the initial world only.
-    pub fn spawn() -> Turtle {
+    pub fn spawn() -> Turtle<'a> {
         let mut rng = rand::thread_rng();
 
         Turtle {
             walking_speed: rng.gen(),
             swimming_speed: rng.gen(),
-            color: Color{r: rng.gen(), g: rng.gen(), b: rng.gen()}
+            color: Color{r: rng.gen(), g: rng.gen(), b: rng.gen()},
+            children: Vec::new()
         }
+    }
+
+    pub fn add_child(&'a mut self, child: &'a Turtle) {
+        self.children.push(child);
     }
 }
