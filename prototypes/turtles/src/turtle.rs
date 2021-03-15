@@ -1,4 +1,5 @@
 use rand::prelude::*;
+use std::rc::Rc;
 
 // Chooses bits at random from each of x and y.
 pub fn cross32(x: u32, y: u32) -> u32 {
@@ -34,23 +35,23 @@ impl Color {
 }
 
 #[derive(Debug)]
-pub struct Turtle<'a> {
+pub struct Turtle {
     walking_speed: u32,
     swimming_speed: u32,
     color: Color,
 
     // Can't just have a vector of children because the children are owned by the campus and they can't have two owners.
-    children: Vec<&'a Turtle<'a>>,
+    children: Vec<Rc<Turtle>>,
 }
 
 
-impl<'a> Turtle<'a> {
+impl Turtle {
     // You normally don't create a new Turtle from nothing; instead, breed
     // two Turtles.
     // Lifetimes are critical and tricky here!
     // The output lifetime doesn't depend on the lifetimes
     // of the parameters.
-    pub fn breed(p1: &Turtle, p2: &Turtle) -> Turtle<'a> {
+    pub fn breed(p1: &Turtle, p2: &Turtle) -> Turtle {
         Turtle {
             walking_speed: cross32(p1.walking_speed, p2.walking_speed),
             swimming_speed: cross32(p1.swimming_speed, p2.swimming_speed),
@@ -60,7 +61,7 @@ impl<'a> Turtle<'a> {
     }
 
     // This is for use when creating the initial world only.
-    pub fn spawn() -> Turtle<'a> {
+    pub fn spawn() -> Turtle {
         let mut rng = rand::thread_rng();
 
         Turtle {
@@ -71,7 +72,7 @@ impl<'a> Turtle<'a> {
         }
     }
 
-    pub fn add_child(&'a mut self, child: &'a Turtle) {
+    pub fn add_child(&mut self, child: Rc<Turtle>) {
         self.children.push(child);
     }
 }

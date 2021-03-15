@@ -1,17 +1,19 @@
 use crate::turtle::Turtle;
 
 use std::fmt;
+use std::rc::Rc;
+
 
 // All the turtles live on campus.
-pub struct Campus<'a> {
-    turtles: Vec<Turtle<'a>>,
+pub struct Campus {
+    turtles: Vec<Rc<Turtle>>,
 }
 
-impl<'a> Campus<'a> {
-    pub fn new(initial_turtles: u32) -> Campus<'a> {
+impl Campus {
+    pub fn new(initial_turtles: u32) -> Campus {
         let mut turtles = Vec::new();
         for _i in 0..initial_turtles {
-            turtles.push(Turtle::spawn());
+            turtles.push(Rc::new(Turtle::spawn()));
         }
 
         Campus {turtles}
@@ -27,18 +29,17 @@ impl<'a> Campus<'a> {
             // let slice = self.turtles.as_slice();
             let t1 = &self.turtles[t1_index];
             let t2 = &self.turtles[t2_index];
-            Turtle::breed(t1, t2)
+            Rc::new(Turtle::breed(t1, t2))
         };
 
-        
-        // self.turtles[t1_index].add_child(&new_turtle);
-        // self.turtles[t2_index].add_child(&new_turtle);
+        // self.turtles[t1_index].add_child(new_turtle.clone());
+        // self.turtles[t2_index].add_child(new_turtle.clone());
 
         self.turtles.push(new_turtle);
     }
 }
 
-impl<'a> fmt::Debug for Campus<'a> {
+impl fmt::Debug for Campus {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for t in &self.turtles {
             write!(f, "{:?}\n", t)?;
