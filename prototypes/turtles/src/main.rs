@@ -1,8 +1,11 @@
 mod campus;
 mod turtle;
+mod cookbook;
+mod genetics;
 
 use crate::turtle::Turtle;
 use crate::campus::Campus;
+use crate::cookbook::Cookbook;
 
 use rand::prelude::*;
 
@@ -17,8 +20,6 @@ fn main() {
 
     let mut rng = rand::thread_rng();
 
-    campus.breed_turtles(0, 1);
-
     for _i in 0..5 {
         let t1_index = rng.gen_range(0..campus_size);
         let mut t2_index = rng.gen_range(0..campus_size);
@@ -32,6 +33,15 @@ fn main() {
             campus.breed_turtles(t1_index, t2_index);
         }
 
-        println!("{:?}", campus);
+       println!("{:?}", campus);
     }
+
+    // Ask each turtle to choose a favorite recipe.
+    let cookbook = Cookbook::new();
+    for t in campus.turtles() {
+        let recipe = t.borrow().choose_recipe(&cookbook);
+        println!("{:?}'s favorite recipe is {:?}", t, recipe);
+    }
+
+
 }
