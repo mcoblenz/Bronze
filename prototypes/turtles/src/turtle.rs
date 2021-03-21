@@ -4,6 +4,7 @@ use std::cell::RefCell;
 
 use crate::cookbook::*;
 use crate::genetics::*;
+use crate::magic::*;
 
 
 #[derive(Debug, Copy, Clone)]
@@ -37,6 +38,8 @@ pub struct Turtle {
 
     // Can't just have a vector of children because the children are owned by the campus and they can't have two owners.
     children: Vec<Rc<RefCell<Turtle>>>,
+
+    magical_item: Option<Box<TurtlePower>>,
 }
 
 
@@ -55,11 +58,16 @@ impl Turtle {
             color: Color::cross(&t1.color, &t2.color),
             favorite_flavor: Flavor::random_flavor(),
             children: Vec::new(),
+            magical_item: None,
         }
     }
 
     pub fn walking_speed(&self) -> u32 {
         self.walking_speed
+    }
+
+    pub fn set_walking_speed(&mut self, new_speed: u32) {
+        self.walking_speed = new_speed;
     }
 
     pub fn color(&self) -> Color {
@@ -72,7 +80,7 @@ impl Turtle {
 
     pub fn new(walking_speed: u32, favorite_flavor: Flavor, color: Color) -> Turtle {
         Turtle {
-            walking_speed, color, favorite_flavor, children: vec![]
+            walking_speed, color, favorite_flavor, children: vec![], magical_item: None
         }
     }
 
@@ -87,5 +95,22 @@ impl Turtle {
 
     pub fn add_child(&mut self, child: Rc<RefCell<Turtle>>) {
         self.children.push(child);
+    }
+
+    pub fn teach_children(&mut self) {
+        for child in &self.children {
+            let mut t = child.borrow_mut();
+            let old_speed = t.walking_speed();
+            t.set_walking_speed(old_speed + 1);
+        }
+    }
+
+    pub fn set_color(&mut self, new_color: Color) {
+        self.color = new_color;
+    }
+
+
+    pub fn take_magical_item(&mut self, item: Box<TurtlePower>) {
+        self.magical_item = Some(item);
     }
 }

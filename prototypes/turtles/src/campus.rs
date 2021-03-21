@@ -22,7 +22,7 @@ impl Campus {
         let mut turtles = Vec::new();
         for _i in 0..initial_turtles {
             let new_turtle = Turtle::new(
-                rng.gen(), 
+                rng.gen::<u32>() % 10, 
                 Flavor::random_flavor(),
                 Color::new(rng.gen(), rng.gen(), rng.gen()),
             );
@@ -73,6 +73,16 @@ impl Campus {
         }
 
         fastest.map(|f| f.borrow())
+    }
+
+    pub fn school(&self) {
+        for turtle in self.turtles() {
+            turtle.borrow_mut().teach_children();
+        }
+    }
+
+    pub fn paint_turtle(&self, turtle_index: usize, new_color: Color) {
+        self.turtles[turtle_index].borrow_mut().set_color(new_color);
     }
 }
 
