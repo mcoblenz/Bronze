@@ -10,7 +10,7 @@ use std::sync::atomic::{
     AtomicBool, AtomicI16, AtomicI32, AtomicI64, AtomicI8, AtomicIsize, AtomicU16, AtomicU32,
     AtomicU64, AtomicU8, AtomicUsize,
 };
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::borrow::Borrow;
 
 /// The Finalize trait, which needs to be implemented on
@@ -188,6 +188,13 @@ impl<T: GcTrace + Copy> Finalize for Cell<T> {}
 unsafe impl<T: GcTrace + Copy> GcTrace for Cell<T> {
     custom_trace!(this, {
         mark(&this.get());
+    });
+}
+
+impl<T: GcTrace + Copy> Finalize for RefCell<T> {}
+unsafe impl<T: GcTrace + Copy> GcTrace for RefCell<T> {
+    custom_trace!(this, {
+        mark(&*this.borrow());
     });
 }
 

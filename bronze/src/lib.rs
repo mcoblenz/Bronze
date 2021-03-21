@@ -215,6 +215,48 @@ fn extract_vtable<T: GcTrace>(data: &T) -> *mut Vtable {
     }
 }
 
+impl<T: GcTrace> GcRef<T> {
+    pub fn new(b: T) -> GcRef<T> {
+        let nonnull_ptr = GC_STATE.with(|st| {
+            let mut st = st.borrow_mut();
+
+            // Collect if needed. Strategy from Manishearth.
+
+            #[cfg(feature="enable_garbage_collection")]
+            if st.bytes_allocated > st.threshold {
+                println!("heap getting too full. Automatic garbage collection triggered.");
+                collect_garbage(&mut st);
+
+                if st.bytes_allocated as f64 > st.threshold as f64 * USED_SPACE_RATIO {
+                    // we didn't collect enough, so increase the
+                    // threshold for next time, to avoid thrashing the
+                    // collector too much/behaving quadratically.
+                    st.threshold = (st.bytes_allocated as f64 / USED_SPACE_RATIO) as usize
+                }
+            }
+
+
+
+            let vtable = extract_vtable(&b);
+
+            let header = GcBoxHeader {
+                marked: Cell::new(false),
+                vtable: vtable,
+                next: st.boxes_start.take()
+            };
+            let bx_ptr = Box::into_raw(Box::new(GcBox {header, data: b}));
+            let nonnull_ptr = unsafe {NonNull::new_unchecked(bx_ptr)};
+            st.boxes_start = Some(nonnull_ptr);
+            st.bytes_allocated += mem::size_of::<GcBox<T>>();
+
+            nonnull_ptr
+        });
+
+        println!("allocated box {:p}", nonnull_ptr);
+        GcBox::ref_from_ptr(nonnull_ptr)
+    }
+}
+
 impl<T: GcTrace + ?Sized> GcRef<T> {
     // "as_ref" is used to obtain a reference to the underlying data.
     pub fn as_ref<'a>(&'a self) -> &'a T {
@@ -277,6 +319,26 @@ impl<T, U> CoerceUnsized<GcRef<U>> for GcRef<T>
     where T: Unsize<U> + GcTrace + ?Sized,
     U: GcTrace + ?Sized 
     {}
+
+impl<T: GcTrace + ?Sized + std::fmt::Debug> std::fmt::Debug for GcRef<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        unsafe {(self.obj_ref).as_ref().data.fmt(f)}
+    }
+}
+
+impl<T: GcTrace + ?Sized> std::ops::Deref for GcRef<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        self.as_ref()
+    }
+}
+
+impl<T: GcTrace + ?Sized> std::ops::DerefMut for GcRef<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.as_mut()
+    }
+}
 
 //===================== GcNullableRef =================
 // GcNullableRef can't be defined as GcRef<Option<T>> because Option doesn't support unsized types.
@@ -437,43 +499,7 @@ pub struct Gc<T: ?Sized> {
 
 impl<T: GcTrace> Gc<T> {
     pub fn new(b: T) -> GcRef<T> {
-        let nonnull_ptr = GC_STATE.with(|st| {
-            let mut st = st.borrow_mut();
-
-            // Collect if needed. Strategy from Manishearth.
-
-            #[cfg(feature="enable_garbage_collection")]
-            if st.bytes_allocated > st.threshold {
-                println!("heap getting too full. Automatic garbage collection triggered.");
-                collect_garbage(&mut st);
-
-                if st.bytes_allocated as f64 > st.threshold as f64 * USED_SPACE_RATIO {
-                    // we didn't collect enough, so increase the
-                    // threshold for next time, to avoid thrashing the
-                    // collector too much/behaving quadratically.
-                    st.threshold = (st.bytes_allocated as f64 / USED_SPACE_RATIO) as usize
-                }
-            }
-
-
-
-            let vtable = extract_vtable(&b);
-
-            let header = GcBoxHeader {
-                marked: Cell::new(false),
-                vtable: vtable,
-                next: st.boxes_start.take()
-            };
-            let bx_ptr = Box::into_raw(Box::new(GcBox {header, data: b}));
-            let nonnull_ptr = unsafe {NonNull::new_unchecked(bx_ptr)};
-            st.boxes_start = Some(nonnull_ptr);
-            st.bytes_allocated += mem::size_of::<GcBox<T>>();
-
-            nonnull_ptr
-        });
-
-        println!("allocated box {:p}", nonnull_ptr);
-        GcBox::ref_from_ptr(nonnull_ptr)
+        GcRef::new(b)
     }
 
 
