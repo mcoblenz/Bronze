@@ -8,7 +8,7 @@ license = "MIT"
 description = "The Bronze garbage collector for Rust. This version only includes the API for creating and using GC references; it does not actually collect anything. For experimental purposes only."
 homepage = "http://www.cs.umd.edu/~mcoblenz/"
 repository = "https://github.com/mcoblenz/Bronze/"
-keywords = ["garbage collection", "gc"]
+keywords = ["garbage", "collection", "gc"]
 categories = ["memory-management"]
 readme = "README.md"
 

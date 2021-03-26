@@ -7,7 +7,7 @@ repository = "https://github.com/mcoblenz/Bronze"
 homepage = "http://www.cs.umd.edu/~mcoblenz/"
 readme = "../README.md"
 license = "MPL-2.0"
-keywords = ["garbage collection", "gc"]
+keywords = ["garbage", "collection", "gc"]
 categories = ["memory-management"]
 edition = "2018"
 
