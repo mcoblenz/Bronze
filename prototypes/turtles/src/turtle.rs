@@ -32,6 +32,7 @@ impl Color {
 
 #[derive(Debug)]
 pub struct Turtle {
+    name: String,
     walking_speed: u32,
     color: Color,
     favorite_flavor: Flavor,
@@ -39,7 +40,7 @@ pub struct Turtle {
     // Can't just have a vector of children because the children are owned by the campus and they can't have two owners.
     children: Vec<Rc<RefCell<Turtle>>>,
 
-    magical_item: Option<Box<TurtlePower>>,
+    magical_item: Option<Box<dyn TurtlePower>>,
 }
 
 
@@ -49,11 +50,12 @@ impl Turtle {
     // Lifetimes are critical and tricky here!
     // The output lifetime doesn't depend on the lifetimes
     // of the parameters.
-    pub fn breed(p1: Rc<RefCell<Turtle>>, p2: Rc<RefCell<Turtle>>) -> Turtle {
+    pub fn breed(p1: Rc<RefCell<Turtle>>, p2: Rc<RefCell<Turtle>>, name: String) -> Turtle {
         let t1 = p1.borrow();
         let t2 = p2.borrow();
 
         Turtle {
+            name,
             walking_speed: cross32(t1.walking_speed, t2.walking_speed),
             color: Color::cross(&t1.color, &t2.color),
             favorite_flavor: Flavor::random_flavor(),
@@ -78,9 +80,13 @@ impl Turtle {
         self.favorite_flavor
     }
 
-    pub fn new(walking_speed: u32, favorite_flavor: Flavor, color: Color) -> Turtle {
+    pub fn name(&self) -> &String {
+        &self.name
+    }
+
+    pub fn new(name: String, walking_speed: u32, favorite_flavor: Flavor, color: Color) -> Turtle {
         Turtle {
-            walking_speed, color, favorite_flavor, children: vec![], magical_item: None
+            name, walking_speed, color, favorite_flavor, children: vec![], magical_item: None
         }
     }
 
@@ -110,7 +116,7 @@ impl Turtle {
     }
 
 
-    pub fn take_magical_item(&mut self, item: Box<TurtlePower>) {
+    pub fn take_magical_item(&mut self, item: Box<dyn TurtlePower>) {
         self.magical_item = Some(item);
     }
 }

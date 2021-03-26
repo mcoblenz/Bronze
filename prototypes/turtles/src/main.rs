@@ -3,6 +3,7 @@ mod turtle;
 mod cookbook;
 mod genetics;
 mod magic;
+mod turtle_collection;
 
 use crate::turtle::Turtle;
 use crate::campus::Campus;
@@ -32,7 +33,7 @@ fn main() {
         }
 
         {
-            campus.breed_turtles(t1_index, t2_index);
+            campus.breed_turtles(t1_index, t2_index, String::from("Testudo"));
         }
     }
 
