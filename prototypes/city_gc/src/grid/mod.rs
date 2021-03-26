@@ -1,8 +1,8 @@
 // A Grid represents a plot of land, divided into squares. 
 // It is of fixed size.
 use std::fmt;
-use bronze::GcRef;
-use bronze::Gc;
+use bronze_gc::GcRef;
+use bronze_gc::Gc;
 
 pub mod tile;
 
@@ -20,7 +20,7 @@ impl Grid {
             let mut row: Vec<GcRef<dyn tile::Tile>> = Vec::new();
             for _c in 0..num_cols {
                 let tile = tile::EmptyTile{};
-                let gc_tile: bronze::GcRef<dyn tile::Tile> = Gc::new(tile);
+                let gc_tile: bronze_gc::GcRef<dyn tile::Tile> = Gc::new(tile);
                 row.push(gc_tile);
             }
             rows.push(row);

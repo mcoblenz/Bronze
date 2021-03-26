@@ -1,13 +1,14 @@
 [package]
 name = "bronze_derive"
-version = "0.1.0"
+version = "0.0.1"
 authors = ["Michael Coblenz <mcoblenz@umd.edu>"]
-
-description = "Garbage collector derive plugin for rust-gc"
+description = "Plugin for bronze_gc to derive Trace and Finalize traits."
 repository = "https://github.com/mcoblenz/Bronze"
+homepage = "http://www.cs.umd.edu/~mcoblenz/"
 readme = "../README.md"
 license = "MPL-2.0"
-keywords = ["garbage", "macro", "memory"]
+keywords = ["garbage collection", "gc"]
+categories = ["memory-management"]
 edition = "2018"
 
 [lib]

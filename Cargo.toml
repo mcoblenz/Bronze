@@ -1,2 +1,2 @@
 [workspace]
-members = ["bronze", "prototypes/city", "prototypes/city_gc", "prototypes/list_gc", "prototypes/draw_gc", "prototypes/tiny_gc", "prototypes/malloc", "prototypes/turtles", "bronze_derive"]
+members = ["bronze_gc", "prototypes/city", "prototypes/city_gc", "prototypes/list_gc", "prototypes/draw_gc", "prototypes/tiny_gc", "prototypes/malloc", "bronze_derive"]

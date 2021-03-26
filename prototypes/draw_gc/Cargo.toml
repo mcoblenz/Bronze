@@ -10,7 +10,7 @@ edition = "2018"
 cocoa-foundation = "0.1"
 cocoa = "0.24.0"
 winit = "0.24"
-bronze = { path = "../../bronze" }
+bronze_gc = { path = "../../bronze_gc" }
 bronze_derive = { path = "../../bronze_derive" }
 # metal = "0.20.0"
 pixels = "0.2.0"

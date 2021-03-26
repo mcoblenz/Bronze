@@ -1,4 +1,4 @@
-use bronze::*;
+use bronze_gc::*;
 
 use crate::shape::*;
 use crate::command::Command;

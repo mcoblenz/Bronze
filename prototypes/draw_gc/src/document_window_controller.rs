@@ -1,4 +1,4 @@
-use bronze::*;
+use bronze_gc::*;
 use crate::document::*;
 use crate::square::*;
 use crate::insert_shape_command::*;

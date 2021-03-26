@@ -1,4 +1,4 @@
-use bronze::*;
+use bronze_gc::*;
 
 // Implements a doubly-linked list.
 // Lists live in the GC heap but are intended to be referenced from outside.

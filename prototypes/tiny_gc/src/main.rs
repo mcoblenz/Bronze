@@ -1,4 +1,4 @@
-use bronze::*;
+use bronze_gc::*;
 use bronze_derive::*;
 
 trait ATrait {
@@ -27,7 +27,7 @@ fn alloc_one_num() {
 
 #[derive(Trace, Finalize)]
 struct ContainsGc {
-    data: bronze::GcRef<u32>,
+    data: bronze_gc::GcRef<u32>,
 }
 
 fn use_contains_gc() {

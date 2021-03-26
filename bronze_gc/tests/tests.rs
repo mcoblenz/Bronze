@@ -5,7 +5,7 @@ use backtrace::Backtrace;
 // Tests must be run sequentially because the shadow stack implementation does not support concurrency.
 // Unfortunately Rust doesn't support configuring tests to run with only one thread, so we have to use #[serial] on every test!
 // https://github.com/rust-lang/rust/issues/43155
-use bronze::*;
+use bronze_gc::*;
 use bronze_derive::{Trace, Finalize};
 use serial_test::serial;
 

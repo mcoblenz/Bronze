@@ -1,4 +1,4 @@
-use bronze::*;
+use bronze_gc::*;
 
 pub trait Command {
     fn commit(&mut self);

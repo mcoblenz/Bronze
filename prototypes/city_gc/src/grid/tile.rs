@@ -1,6 +1,6 @@
 use std::fmt;
 use bronze_derive::*;
-use bronze::*;
+use bronze_gc::*;
 
 #[derive(Trace, Finalize)]
 pub enum DevelopmentLevel {

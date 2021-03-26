@@ -17,7 +17,7 @@ fn main() {
     #[cfg(feature="enable_garbage_collection")]
     {
         // Tell cargo to link with the libbronze static library
-        println!("cargo:rustc-link-lib=static=bronze");
+        println!("cargo:rustc-link-lib=static=bronze_gc");
         let mut libbronze_dir = PathBuf::from(&env::var("CARGO_MANIFEST_DIR").unwrap());
         libbronze_dir.pop(); // get parent dir
         libbronze_dir.push("libbronze");

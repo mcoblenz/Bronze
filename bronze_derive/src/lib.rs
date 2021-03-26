@@ -16,24 +16,24 @@ fn derive_trace(mut s: Structure<'_>) -> proc_macro2::TokenStream {
     let trace_body = s.each(|bi| quote!(mark(#bi)));
 
     let trace_impl = s.unsafe_bound_impl(
-        quote!(::bronze::GcTrace),
+        quote!(::bronze_gc::GcTrace),
         quote! {
             #[inline] unsafe fn trace(&self) {
                 #[allow(dead_code)]
                 #[inline]
-                unsafe fn mark<T: ::bronze::GcTrace + ?Sized>(it: &T) {
-                    ::bronze::GcTrace::trace(it);
+                unsafe fn mark<T: ::bronze_gc::GcTrace + ?Sized>(it: &T) {
+                    ::bronze_gc::GcTrace::trace(it);
                 }
                 match *self { #trace_body }
             }
             #[inline] fn finalize_glue(&self) { 
                 #[allow(dead_code)]
                 #[inline]
-                fn mark<T: ::bronze::GcTrace + ?Sized>(it: &T) {
-                    ::bronze::GcTrace::finalize_glue(it);
+                fn mark<T: ::bronze_gc::GcTrace + ?Sized>(it: &T) {
+                    ::bronze_gc::GcTrace::finalize_glue(it);
                 }
                 match *self { #trace_body }
-                ::bronze::Finalize::finalize(self);
+                ::bronze_gc::Finalize::finalize(self);
             }
         },
     );
@@ -45,8 +45,8 @@ fn derive_trace(mut s: Structure<'_>) -> proc_macro2::TokenStream {
         quote!(::std::ops::Drop),
         quote! {
             fn drop(&mut self) {
-                // if ::bronze::finalizer_safe() {
-                    ::bronze::Finalize::finalize(self);
+                // if ::bronze_gc::finalizer_safe() {
+                    ::bronze_gc::Finalize::finalize(self);
                 // }
             }
         },
@@ -61,5 +61,5 @@ fn derive_trace(mut s: Structure<'_>) -> proc_macro2::TokenStream {
 decl_derive!([Finalize] => derive_finalize);
 
 fn derive_finalize(s: Structure<'_>) -> proc_macro2::TokenStream {
-    s.unbound_impl(quote!(::bronze::Finalize), quote!())
+    s.unbound_impl(quote!(::bronze_gc::Finalize), quote!())
 }

@@ -43,7 +43,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-Files bronze/src/lib.rs and bronze/src/trace.rs incorprate work covered by the following copyright and permission notice (https://github.com/Manishearth/rust-gc/):
+Files bronze_gc/src/lib.rs and bronze_gc/src/trace.rs incorprate work covered by the following copyright and permission notice (https://github.com/Manishearth/rust-gc/):
 
 
 Mozilla Public License Version 2.0
