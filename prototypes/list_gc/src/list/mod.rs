@@ -207,4 +207,30 @@ mod tests {
 
 
     }
+
+
+    // AContainer is NOT Copy.
+    struct AContainer {
+        n: u32,
+    }
+
+    impl Finalize for AContainer {}
+    unsafe impl GcTrace for AContainer {
+    custom_trace!(_this, {
+        ()
+    });
+}
+
+    #[test]
+    fn test_list_structs() {
+        let container = AContainer{n: 42};
+        let mut l = List::<AContainer>::new();
+        List::push(&mut l, container);
+        let c = List::pop(&mut l);
+        match c {
+            None => assert!(false, "list should have contained an element"),
+            // can't compare to container, since we moved it.
+            Some(co) => assert_eq!(co.n, 42),
+        }
+    }
 }

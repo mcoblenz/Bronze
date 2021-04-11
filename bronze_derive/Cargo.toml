@@ -1,6 +1,6 @@
 [package]
 name = "bronze_derive"
-version = "0.0.1"
+version = "0.1.0"
 authors = ["Michael Coblenz <mcoblenz@umd.edu>"]
 description = "Plugin for bronze_gc to derive Trace and Finalize traits."
 repository = "https://github.com/mcoblenz/Bronze"

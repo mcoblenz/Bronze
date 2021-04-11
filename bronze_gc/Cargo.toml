@@ -1,6 +1,6 @@
 [package]
 name = "bronze_gc"
-version = "0.0.1"
+version = "0.1.0"
 authors = ["Michael Coblenz <mcoblenz@umd.edu>"]
 edition = "2018"
 links = "libbronze"
@@ -21,12 +21,12 @@ enable_garbage_collection = []
 
 [dependencies]
 multiset = "0.0.5"
-bronze_derive = { path = "../bronze_derive", version = "0.0.1", optional = true}
+bronze_derive = { path = "../bronze_derive", version = "0.1.0", optional = true}
 
 [build-dependencies]
 bindgen = "0.56.0"
 
 [dev-dependencies]
-bronze_derive = { path = "../bronze_derive", version = "0.0.1" }
+bronze_derive = { path = "../bronze_derive", version = "0.1.0" }
 serial_test = "0.5.1"
 backtrace = "0.3.56"
