@@ -61,6 +61,6 @@ To create a new `GcRef<T>`, call `GcRef::new(e)`, where `e` is an expression who
 If you need to remove data from the GC heap, you can use a `GcNullableRef` rather than a `GcRef`. You can create one with `Gc::new_nullable`. `GcNullableRef` is like `GcRef` but adds a method `remove`. The first call to `remove` returns an `Option` populated with the data that was previously in the GC heap. Future calls to `remove` return None.
 
 ## Experimental Implementation
-This implementation is *experimental*. In particular, the collector will not run; be aware that you will eventually run out of memory. However, the present version is suitable for experimentation and prototyping.
+This implementation is *experimental*. The 'main' branch has a collector, but it only works in limited cases is not general enough to work with YOUR code. The 'API-only' branch has the collector disabled; be aware that you will eventually run out of memory. However, the present version is suitable for experimentation and prototyping.
 
 An important aspect of the experimental nature is that, for now, it is possible with Bronze to create multiple mutable references to the same data. Obviously, this is unsafe in Rust. For now, we assume that users will encapsulate their data structures appropriately and avoid this; in the future, we should explore enforcement mechanisms to make this safe in general. One approach might be akin to how RefCell keeps track of outstanding references; another might be akin to Stacked Borrows.
