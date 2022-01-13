@@ -20,7 +20,7 @@ use std::boxed::Box;
 use std::mem;
 use core::ops::CoerceUnsized;
 use std::marker::Unsize;
-use core::ffi::c_void;
+use std::ops::{Deref, DerefMut};
 
 #[cfg(feature="enable_garbage_collection")]
 use std::include;
@@ -77,12 +77,27 @@ struct GcBoxHeader {
     marked: Cell<bool>,
 }
 
+// Taken from the standard library (core::cell.rs)
+type BorrowFlag = isize;
+const UNUSED: BorrowFlag = 0;
+
+#[inline(always)]
+fn is_writing(x: BorrowFlag) -> bool {
+    x < UNUSED
+}
+
+#[inline(always)]
+fn is_reading(x: BorrowFlag) -> bool {
+    x > UNUSED
+}
+
 // These go on the Gc heap and hold the actual Gc data.
 // GcBoxHeader must occur FIRST so that the GC runtime can find it.
 // T is not declared to be GcTrace here so the coercions work later,
 // but in fact, there is no way to construct a GcBox with a type that isn't GcTrace.
 pub struct GcBox<T: ?Sized + 'static> {
     header: GcBoxHeader,
+    borrow_flag: Cell<BorrowFlag>,
     data: T,
 }
 
@@ -91,6 +106,7 @@ pub struct GcBox<T: ?Sized + 'static> {
 // GcBoxHeader must occur FIRST so that the GC runtime can find it.
 pub struct GcNullableBox<T: GcTrace + ?Sized + 'static> {
     header: GcBoxHeader,
+    borrow_flag: Cell<BorrowFlag>,
     is_null: bool,
     data: T,
 }
@@ -170,6 +186,7 @@ impl<T: ?Sized> GcBox<T> {
 impl<T: ?Sized> Drop for GcBox<T> {
     fn drop(&mut self) {
         // Do not call finalize_glue here because the generated drop() already calls finalize.
+        assert!(self.borrow_flag.get() == UNUSED);
         println!("deallocating GcBox {:p}", self);
     }
 }
@@ -244,7 +261,7 @@ impl<T: GcTrace> GcRef<T> {
                 vtable: vtable,
                 next: st.boxes_start.take()
             };
-            let bx_ptr = Box::into_raw(Box::new(GcBox {header, data: b}));
+            let bx_ptr = Box::into_raw(Box::new(GcBox {header, borrow_flag: Cell::new(UNUSED), data: b}));
             let nonnull_ptr = unsafe {NonNull::new_unchecked(bx_ptr)};
             st.boxes_start = Some(nonnull_ptr);
             st.bytes_allocated += mem::size_of::<GcBox<T>>();
@@ -254,6 +271,108 @@ impl<T: GcTrace> GcRef<T> {
 
         println!("allocated box {:p}", nonnull_ptr);
         GcBox::ref_from_ptr(nonnull_ptr)
+    }
+}
+
+// Like Ref.
+pub struct GcBorrow<'b, T: GcTrace + ?Sized + 'b> {
+    value: &'b T,
+    borrow_cell: &'b Cell<BorrowFlag>,
+}
+
+impl<'b, T: GcTrace + ?Sized + 'b> GcBorrow<'b, T> {
+    fn new(r: &'b GcRef<T>) -> Option<GcBorrow<'b, T>> {
+        println!("making a new borrow.");
+
+        // Implementation from core::cell::BorrowRef.
+        let borrow_cell = &r.as_box().borrow_flag;
+        let b = borrow_cell.get().wrapping_add(1);
+        if !is_reading(b) {
+            // Incrementing borrow can result in a non-reading value (<= 0) in these cases:
+            // 1. It was < 0, i.e. there are writing borrows, so we can't allow a read borrow
+            //    due to Rust's reference aliasing rules
+            // 2. It was isize::MAX (the max amount of reading borrows) and it overflowed
+            //    into isize::MIN (the max amount of writing borrows) so we can't allow
+            //    an additional read borrow because isize can't represent so many read borrows
+            //    (this can only happen if you mem::forget more than a small constant amount of
+            //    `Ref`s, which is not good practice)
+            None
+        } else {
+            // Incrementing borrow can result in a reading value (> 0) in these cases:
+            // 1. It was = 0, i.e. it wasn't borrowed, and we are taking the first read borrow
+            // 2. It was > 0 and < isize::MAX, i.e. there were read borrows, and isize
+            //    is large enough to represent having one more read borrow
+            borrow_cell.set(b);
+            // println!("making a new borrow. New borrow count is {}", b);
+            Some(GcBorrow {value: r.as_ref(), borrow_cell: &borrow_cell})
+        }
+    }
+}
+
+impl<T: GcTrace + ?Sized> Drop for GcBorrow<'_, T> {
+    fn drop(&mut self) {
+        let borrow = self.borrow_cell.get();
+        debug_assert!(is_reading(borrow));
+        self.borrow_cell.set(borrow - 1);
+        // println!("dropping a borrow. New borrow count is {}", borrow - 1);
+    }
+}
+
+impl<T: GcTrace + ?Sized> Deref for GcBorrow<'_, T> {
+    type Target = T;
+
+    fn deref(&self) -> &T {
+        self.value
+    }
+}
+
+// Like RefMut.
+pub struct GcBorrowMut<'b, T: GcTrace + ?Sized + 'b> {
+    value: &'b mut T,
+    borrow_cell: &'b Cell<BorrowFlag>,
+}
+
+impl<'b, T: GcTrace + ?Sized + 'b> GcBorrowMut<'b, T> {
+    fn new(r: &'b mut GcRef<T>) -> Option<GcBorrowMut<'b, T>> {
+        // println!("making a new mutable borrow.");
+
+        // Implementation from core::cell::BorrowRefMut.
+        // NOTE: Unlike BorrowRefMut::clone, new is called to create the initial
+        // mutable reference, and so there must currently be no existing
+        // references. Thus, while clone increments the mutable refcount, here
+        // we explicitly only allow going from UNUSED to UNUSED - 1.
+        let b = r.as_mut_box();
+        let borrow = b.borrow_flag.get();
+        match borrow {
+            UNUSED => {
+                b.borrow_flag.set(UNUSED - 1);
+                Some(GcBorrowMut {value: &mut b.data, borrow_cell: &b.borrow_flag})
+            }
+            _ => None,
+        }
+    }
+}
+
+impl<T: GcTrace + ?Sized> Drop for GcBorrowMut<'_, T> {
+    fn drop(&mut self) {
+        let borrow = self.borrow_cell.get();
+        debug_assert!(is_writing(borrow));
+        self.borrow_cell.set(borrow + 1);
+        // println!("dropping a borrow. New borrow count is {}", borrow + 1);
+    }
+}
+
+impl<T: GcTrace + ?Sized> Deref for GcBorrowMut<'_, T> {
+    type Target = T;
+
+    fn deref(&self) -> &T {
+        self.value
+    }
+}
+
+impl<T: GcTrace + ?Sized> DerefMut for GcBorrowMut<'_, T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.value
     }
 }
 
@@ -273,9 +392,36 @@ impl<T: GcTrace + ?Sized> GcRef<T> {
         }
     }
 
+    fn borrow_flag<'a>(&'a self) -> &'a Cell<BorrowFlag> {
+        unsafe {
+            let gc_box = self.obj_ref.as_ref();
+            &gc_box.borrow_flag
+        }
+    }
+
     pub(crate) fn as_box<'a> (&'a self) -> &GcBox<T> {
         unsafe {
             self.obj_ref.as_ref()
+        }
+    }
+
+    pub(crate) fn as_mut_box<'a> (&'a mut self) -> &mut GcBox<T> {
+        unsafe {
+            self.obj_ref.as_mut()
+        }
+    }
+
+    pub fn borrow(&self) -> GcBorrow<'_, T> {
+        match GcBorrow::new(self) {
+            Some(b) => b,
+            None => panic!("GC object is already mutably borrowed")
+        }
+    }
+
+    pub fn borrow_mut(&mut self) -> GcBorrowMut<'_, T> {
+        match GcBorrowMut::new(self) {
+            Some(b) => b,
+            None => panic!("GC object is already mutably borrowed")
         }
     }
 }
@@ -326,7 +472,7 @@ impl<T: GcTrace + ?Sized + std::fmt::Debug> std::fmt::Debug for GcRef<T> {
     }
 }
 
-impl<T: GcTrace + ?Sized> std::ops::Deref for GcRef<T> {
+impl<T: GcTrace + ?Sized> Deref for GcRef<T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -334,7 +480,7 @@ impl<T: GcTrace + ?Sized> std::ops::Deref for GcRef<T> {
     }
 }
 
-impl<T: GcTrace + ?Sized> std::ops::DerefMut for GcRef<T> {
+impl<T: GcTrace + ?Sized> DerefMut for GcRef<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.as_mut()
     }
@@ -515,7 +661,7 @@ impl<T: GcTrace> Gc<T> {
                 vtable: vtable,
                 next: st.boxes_start.take()
             };
-            let bx_ptr = Box::into_raw(Box::new(GcNullableBox {is_null: false, header, data: b}));
+            let bx_ptr = Box::into_raw(Box::new(GcNullableBox {is_null: false, header, borrow_flag: Cell::new(UNUSED), data: b}));
             let nonnull_ptr = unsafe {NonNull::new_unchecked(bx_ptr)};
             st.nonnull_boxes_start = Some(nonnull_ptr);
             st.bytes_allocated += mem::size_of::<GcBox<T>>();

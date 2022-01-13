@@ -1,6 +1,8 @@
 use std::cell::Cell;
 use std::rc::Rc;
 use backtrace::Backtrace;
+use std::borrow::{Borrow, BorrowMut};
+use std::path::PathBuf;
 
 // Tests must be run sequentially because the shadow stack implementation does not support concurrency.
 // Unfortunately Rust doesn't support configuring tests to run with only one thread, so we have to use #[serial] on every test!
@@ -9,6 +11,7 @@ use bronze_gc::*;
 use bronze_derive::{Trace, Finalize};
 use serial_test::serial;
 
+mod dynamic_borrowing;
 
 #[test]
 #[serial]
@@ -195,4 +198,3 @@ fn ten_allocations() {
 
     assert_eq!(tracker.as_ref().get(), 10);
 }
-
