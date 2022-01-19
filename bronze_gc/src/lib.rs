@@ -1,6 +1,9 @@
 // Bronze is based in part on code from https://github.com/withoutboats/shifgrethor
 // as well as code from https://github.com/Manishearth/rust-gc
 
+// The code pertaining to automatic tracking of borrowed references is from the Rust standard library, which is licensed under the MIT license (https://opensource.org/licenses/MIT).
+
+
 
 #![allow(non_upper_case_globals)]
 #![allow(non_camel_case_types)]
