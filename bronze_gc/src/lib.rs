@@ -215,7 +215,6 @@ impl<T: GcTrace + ?Sized> GcNullableBox<T> {
 }
 
 //================= GcRef =================
-// GcRef represents a reference WITHIN the GC heap.
 #[derive(std::cmp::Eq)]
 pub struct GcRef<T: GcTrace + ?Sized + 'static> {
     obj_ref: NonNull<GcBox<T>>,
@@ -284,11 +283,10 @@ pub struct GcBorrow<'b, T: GcTrace + ?Sized + 'b> {
 }
 
 impl<'b, T: GcTrace + ?Sized + 'b> GcBorrow<'b, T> {
-    fn new(r: &'b GcRef<T>) -> Option<GcBorrow<'b, T>> {
+    fn new(value: &'b T, borrow_cell: &'b Cell<BorrowFlag>) -> Option<GcBorrow<'b, T>> {
         println!("making a new borrow.");
 
         // Implementation from core::cell::BorrowRef.
-        let borrow_cell = &r.as_box().borrow_flag;
         let b = borrow_cell.get().wrapping_add(1);
         if !is_reading(b) {
             // Incrementing borrow can result in a non-reading value (<= 0) in these cases:
@@ -307,7 +305,7 @@ impl<'b, T: GcTrace + ?Sized + 'b> GcBorrow<'b, T> {
             //    is large enough to represent having one more read borrow
             borrow_cell.set(b);
             // println!("making a new borrow. New borrow count is {}", b);
-            Some(GcBorrow {value: r.as_ref(), borrow_cell: &borrow_cell})
+            Some(GcBorrow {value: value, borrow_cell: &borrow_cell})
         }
     }
 }
@@ -336,7 +334,7 @@ pub struct GcBorrowMut<'b, T: GcTrace + ?Sized + 'b> {
 }
 
 impl<'b, T: GcTrace + ?Sized + 'b> GcBorrowMut<'b, T> {
-    fn new(r: &'b mut GcRef<T>) -> Option<GcBorrowMut<'b, T>> {
+    fn new(value: &'b mut T, borrow_cell: &'b Cell<BorrowFlag>) -> Option<GcBorrowMut<'b, T>> {
         // println!("making a new mutable borrow.");
 
         // Implementation from core::cell::BorrowRefMut.
@@ -344,12 +342,11 @@ impl<'b, T: GcTrace + ?Sized + 'b> GcBorrowMut<'b, T> {
         // mutable reference, and so there must currently be no existing
         // references. Thus, while clone increments the mutable refcount, here
         // we explicitly only allow going from UNUSED to UNUSED - 1.
-        let b = r.as_mut_box();
-        let borrow = b.borrow_flag.get();
+        let borrow = borrow_cell.get();
         match borrow {
             UNUSED => {
-                b.borrow_flag.set(UNUSED - 1);
-                Some(GcBorrowMut {value: &mut b.data, borrow_cell: &b.borrow_flag})
+                borrow_cell.set(UNUSED - 1);
+                Some(GcBorrowMut {value: value, borrow_cell: borrow_cell})
             }
             _ => None,
         }
@@ -381,14 +378,14 @@ impl<T: GcTrace + ?Sized> DerefMut for GcBorrowMut<'_, T> {
 
 impl<T: GcTrace + ?Sized> GcRef<T> {
     // "as_ref" is used to obtain a reference to the underlying data.
-    pub fn as_ref<'a>(&'a self) -> &'a T {
+    fn as_ref<'a>(&'a self) -> &'a T {
         unsafe {
             let gc_box = self.obj_ref.as_ref();
             gc_box.as_ref()
         }
     }
 
-    pub fn as_mut<'a>(&'a mut self) -> &'a mut T {
+    fn as_mut<'a>(&'a mut self) -> &'a mut T {
         unsafe {
             let gc_box = self.obj_ref.as_mut();
             gc_box.as_mut()
@@ -415,15 +412,17 @@ impl<T: GcTrace + ?Sized> GcRef<T> {
     }
 
     pub fn borrow(&self) -> GcBorrow<'_, T> {
-        match GcBorrow::new(self) {
+        let borrow_flag = &self.as_box().borrow_flag;
+        match GcBorrow::new(self.as_ref(), borrow_flag) {
             Some(b) => b,
             None => panic!("GC object is already mutably borrowed")
         }
     }
 
     pub fn borrow_mut(&mut self) -> GcBorrowMut<'_, T> {
-        match GcBorrowMut::new(self) {
-            Some(b) => b,
+        let gc_box = unsafe { self.obj_ref.as_ref() };
+        match GcBorrowMut::new(self.as_mut(), &gc_box.borrow_flag) {
+            Some(borrow) => borrow,
             None => panic!("GC object is already mutably borrowed")
         }
     }
@@ -475,20 +474,6 @@ impl<T: GcTrace + ?Sized + std::fmt::Debug> std::fmt::Debug for GcRef<T> {
     }
 }
 
-impl<T: GcTrace + ?Sized> Deref for GcRef<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        self.as_ref()
-    }
-}
-
-impl<T: GcTrace + ?Sized> DerefMut for GcRef<T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        self.as_mut()
-    }
-}
-
 //===================== GcNullableRef =================
 // GcNullableRef can't be defined as GcRef<Option<T>> because Option doesn't support unsized types.
 
@@ -500,17 +485,32 @@ pub struct GcNullableRef<T: GcTrace + ?Sized + 'static> {
 
 impl<T: GcTrace + ?Sized> GcNullableRef<T> {
     // "as_ref" is used to obtain a reference to the underlying data.
-    pub fn as_ref<'a>(&'a self) -> &'a T {
+    fn as_ref<'a>(&'a self) -> &'a T {
         unsafe {
             let gc_box = self.obj_ref.as_ref();
             gc_box.as_ref()
         }
     }
 
-    pub fn as_mut<'a>(&'a mut self) -> &'a mut T {
+    fn as_mut<'a>(&'a mut self) -> &'a mut T {
         unsafe {
             let gc_box = self.obj_ref.as_mut();
             gc_box.as_mut()
+        }
+    }
+    pub fn borrow(&self) -> GcBorrow<'_, T> {
+        let gc_box = unsafe { self.obj_ref.as_ref() };
+        match GcBorrow::new(self.as_ref(), &gc_box.borrow_flag) {
+            Some(b) => b,
+            None => panic!("GC object is already mutably borrowed")
+        }
+    }
+
+    pub fn borrow_mut(&mut self) -> GcBorrowMut<'_, T> {
+        let gc_box = unsafe { self.obj_ref.as_ref() };
+        match GcBorrowMut::new(self.as_mut(), &gc_box.borrow_flag) {
+            Some(b) => b,
+            None => panic!("GC object is already mutably borrowed")
         }
     }
 }

@@ -87,8 +87,8 @@ impl DocumentWindowController {
         let mut graphics_context = GraphicsContext::new(frame, self.pixel_width, self.pixel_height, self.window_size);
 
         // Use the painter's algorithm on the shapes.
-        for shape in &self.document.as_ref().shapes {
-            shape.as_ref().draw(&mut graphics_context);
+        for shape in &self.document.borrow().shapes {
+            shape.draw(&mut graphics_context);
         }
 
         let render_err = pixels.render();

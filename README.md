@@ -28,7 +28,7 @@ pub fn test() {
 }
 ````
 
-With Bronze, types that are not `Copy` can be freely referenced through smart pointers, which *are* `Copy`:
+With Bronze, types that are not `Copy` can be referenced through smart pointers, which *are* `Copy`. Temporary immutable and immutable borrows can be obtained via `borrow()` and `borrow_mut`; these implement `Deref`, allowing convenient access.
 
 ````
 // 
@@ -38,7 +38,7 @@ pub struct IntContainer {
 }
 
 pub fn set(mut c: GcRef<IntContainer>, n: i32) {
-    c.n = n;
+    c.borrow_mut().n = n;
 }
 
 pub fn test() {
@@ -52,13 +52,14 @@ pub fn test() {
 }
 ````
 
-Because `GcRef` implements `Deref`, and because Rust automatically inserts `*` when needed, you can generally treat `GcRef<T>` as if it were a `T` directly. For example, in `set()` above, the body assigns to `c.n`. This implicitly means to dereference the pointer and assign to `n` inside the referenced value. If you like, you can instead call `as_ref()` and `as_mut()` to obtain a reference or mutable reference to the data in the GC heap. 
-
 
 To create a new `GcRef<T>`, call `GcRef::new(e)`, where `e` is an expression whose value you want to be on the GC heap.
 
 ## Advanced Usage
 If you need to remove data from the GC heap, you can use a `GcNullableRef` rather than a `GcRef`. You can create one with `Gc::new_nullable`. `GcNullableRef` is like `GcRef` but adds a method `remove`. The first call to `remove` returns an `Option` populated with the data that was previously in the GC heap. Future calls to `remove` return None.
+
+## Safety
+An earlier version of Bronze allowed users to obtain multiple mutable references to a GC object. This should no longer be possible; instead, Bronze dynamically tracks borrows (using a very similar mechanism to that used in RefCell). To obtain an immutable or mutable borrowed reference to a GC object, call `borrow()` or `borrow_mut()` on the `GcRef`.
 
 ## Experimental Implementation
 This implementation is *experimental*. In particular, the collector will not run; be aware that you will eventually run out of memory. However, the present version is suitable for experimentation and prototyping.

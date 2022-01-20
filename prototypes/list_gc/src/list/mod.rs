@@ -44,7 +44,7 @@ impl<T: GcTrace> Node<T> {
         match self.next {
             None => 1,
             Some(n) => {
-                1 + n.as_ref().len()
+                1 + n.borrow().len()
             }
         }
     }
@@ -56,14 +56,14 @@ impl<T: GcTrace> List<T> {
     }
 
     pub fn len(self_ref: GcNullableRef<Self>) -> usize {
-        match &self_ref.as_ref().head {
+        match &self_ref.borrow().head {
             None => 0,
-            Some(n) => n.as_ref().len()
+            Some(n) => n.borrow().len()
         }
     }
 
     pub fn push(self_ref: &mut GcNullableRef<Self>, value: T) {
-        let list = self_ref.as_mut();
+        let mut list = self_ref.borrow_mut();
          match &mut list.head {
              None => {
                  let new_head = Node {
@@ -82,15 +82,15 @@ impl<T: GcTrace> List<T> {
 
                  let new_head_gc = Gc::new_nullable(new_head);
 
-                 assert!(orig_head.as_ref().prev.is_none());
-                 orig_head.as_mut().prev = Some(new_head_gc);
+                 assert!(orig_head.borrow().prev.is_none());
+                 orig_head.borrow_mut().prev = Some(new_head_gc);
                  list.head = Some(new_head_gc);
              }
          }
     }
 
     pub fn pop(self_ref: &mut GcNullableRef<Self>) -> Option<T> {
-        let list = self_ref.as_mut();
+        let mut list = self_ref.borrow_mut();
 
         // Will need to update head_ref with the new head.
         let head_opt_ref = &mut list.head;
@@ -109,14 +109,14 @@ impl<T: GcTrace> List<T> {
     }    
 
     pub fn assert_consistency(self_ref: GcNullableRef<Self>) {
-        let list = self_ref.as_ref();
+        let list = self_ref.borrow();
         match &list.head {
             None => {},
             Some(h) => {
-                match h.as_ref().next {
+                match h.borrow().next {
                     None => (),
                     Some(next) => {
-                        match next.as_ref().prev {
+                        match next.borrow().prev {
                             None => assert!(false),
                             Some(p) => {
                                 assert!(p == *h);

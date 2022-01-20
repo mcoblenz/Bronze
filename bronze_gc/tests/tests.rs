@@ -16,12 +16,12 @@ mod dynamic_borrowing;
 #[test]
 #[serial]
 fn new_ref() {
-    let num_ref = Gc::new(42);
+    let num_ref: GcRef<i32> = Gc::new(42);
     let ref_alias = num_ref;
-    let gc_num_ref = ref_alias.as_ref();
+    let gc_num_ref = ref_alias.borrow();
 
     // GcRef is Copy, so this is fine.
-    let gc_num_ref2 = num_ref.as_ref();
+    let gc_num_ref2 = num_ref.borrow();
 
     assert_eq!(*gc_num_ref, 42);
     assert_eq!(*gc_num_ref2, 42);

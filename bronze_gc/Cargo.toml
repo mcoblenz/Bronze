@@ -1,6 +1,6 @@
 [package]
 name = "bronze_gc"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["Michael Coblenz <mcoblenz@umd.edu>"]
 edition = "2018"
 links = "libbronze"

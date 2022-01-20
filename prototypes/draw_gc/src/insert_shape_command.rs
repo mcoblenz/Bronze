@@ -17,11 +17,11 @@ impl InsertShapeCommand {
 
 impl Command for InsertShapeCommand {
     fn commit(&mut self) {
-        self.document.as_mut().add_shape(self.shape);
+        self.document.borrow_mut().add_shape(self.shape);
     }
 
     fn undo(&mut self) {
-        self.document.as_mut().remove_shape(self.shape);
+        self.document.borrow_mut().remove_shape(self.shape);
     }
 
     fn redo(&mut self) {

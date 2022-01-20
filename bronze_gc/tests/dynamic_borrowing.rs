@@ -142,3 +142,12 @@ pub fn make_reference_let() {
     let icr: &IntContainer = &c1.borrow();
     take_borrowed_ic(icr);
 }
+
+#[test]
+#[serial]
+pub fn bad_borrow() {
+    let c1: GcRef<i32> = GcRef::new(42);
+    let r: &i32 = &*c1;
+
+
+}
