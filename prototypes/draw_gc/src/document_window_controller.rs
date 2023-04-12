@@ -88,7 +88,7 @@ impl DocumentWindowController {
 
         // Use the painter's algorithm on the shapes.
         for shape in &self.document.borrow().shapes {
-            shape.draw(&mut graphics_context);
+            shape.borrow().draw(&mut graphics_context);
         }
 
         let render_err = pixels.render();

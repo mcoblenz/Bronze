@@ -7,7 +7,7 @@ pub struct IntContainer {
 }
 
 pub fn set(mut c: GcRef<IntContainer>, n: i32) {
-    c.n = n;
+    c.borrow_mut().n = n;
 }
 
 pub fn test() {
