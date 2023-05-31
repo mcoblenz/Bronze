@@ -1,5 +1,5 @@
 use crate::shape::*;
-use bronze::*;
+use bronze_gc::*;
 use bronze_derive::*;
 use std::vec::Vec;
 

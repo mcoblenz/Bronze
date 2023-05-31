@@ -1,4 +1,4 @@
-use bronze::*;
+use bronze_gc::*;
 
 #[derive(Clone, Copy)]
 pub struct Point {

@@ -1,6 +1,6 @@
 use rand::prelude::*;
 use crate::grid::*;
-use bronze::Gc;
+use bronze_gc::Gc;
 
 
 pub fn step(grid: &mut Grid) {

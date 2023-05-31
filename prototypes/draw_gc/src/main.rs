@@ -34,7 +34,7 @@ fn main() {
     let mut pixels = match 
         Pixels::new(pixel_width, pixel_height, surface_texture) {
             Ok(p) => p,
-            Err(e) => panic!(e),
+            Err(e) => panic!("{}", e),
         };
 
 

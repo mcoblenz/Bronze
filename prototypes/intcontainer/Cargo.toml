@@ -1,11 +1,11 @@
 [package]
-name = "tiny_gc"
+name = "intcontainer"
 version = "0.1.0"
-authors = ["Michael Coblenz <mcoblenz@cs.cmu.edu>"]
+authors = ["Michael Coblenz <mcoblenz@umd.edu>"]
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 bronze_gc = { path = "../../bronze_gc" }
-bronze_derive = { path = "../../bronze_derive" }
+bronze_derive = { path = "../../bronze_derive"}

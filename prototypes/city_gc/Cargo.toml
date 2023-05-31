@@ -8,5 +8,5 @@ edition = "2018"
 
 [dependencies]
 rand = "0.7.3"
-bronze = { path = "../../bronze" }
+bronze_gc = { path = "../../bronze_gc" }
 bronze_derive = { path = "../../bronze_derive" }
