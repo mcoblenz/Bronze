@@ -1,14 +1,23 @@
 [package]
-name = "bronze"
-version = "0.1.0"
+name = "bronze_gc"
+version = "0.2.1"
 authors = ["Michael Coblenz <mcoblenz@umd.edu>"]
 edition = "2018"
 links = "libbronze"
+license = "MIT"
+description = "The Bronze garbage collector for Rust. This version only includes the API for creating and using GC references; it does not actually collect anything. For experimental purposes only."
+homepage = "http://www.cs.umd.edu/~mcoblenz/"
+repository = "https://github.com/mcoblenz/Bronze/"
+keywords = ["garbage", "collection", "gc"]
+categories = ["memory-management"]
+readme = "../README.md"
+
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
 derive = ["bronze_derive"]
+enable_garbage_collection = []
 
 [dependencies]
 multiset = "0.0.5"

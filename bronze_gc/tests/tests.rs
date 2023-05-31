@@ -3,23 +3,27 @@
 use std::cell::Cell;
 use std::rc::Rc;
 use backtrace::Backtrace;
+use std::borrow::{Borrow, BorrowMut};
+use std::path::PathBuf;
 
 // Tests must be run sequentially because the shadow stack implementation does not support concurrency.
 // Unfortunately Rust doesn't support configuring tests to run with only one thread, so we have to use #[serial] on every test!
 // https://github.com/rust-lang/rust/issues/43155
-use bronze::*;
+use bronze_gc::*;
 use bronze_derive::{Trace, Finalize};
 use serial_test::serial;
+
+mod dynamic_borrowing;
 
 #[test]
 #[serial]
 fn new_ref() {
-    let num_ref = Gc::new(42);
+    let num_ref: GcRef<i32> = Gc::new(42);
     let ref_alias = num_ref;
-    let gc_num_ref = ref_alias.as_ref();
+    let gc_num_ref = ref_alias.borrow();
 
     // GcRef is Copy, so this is fine.
-    let gc_num_ref2 = num_ref.as_ref();
+    let gc_num_ref2 = num_ref.borrow();
 
     assert_eq!(*gc_num_ref, 42);
     assert_eq!(*gc_num_ref2, 42);
@@ -98,8 +102,6 @@ fn alloc_one_num() {
 fn collect_one_ref() {
     assert_eq!(boxes_len(), 0);
     alloc_one_num();
-
-    force_collect();
 }
 
 #[test]
@@ -112,7 +114,6 @@ fn collect_two_refs() {
     // At this point, the stack map should show that the first ref is not a root.
     // Therefore, it should get collected in the next collection.
     let _num_gc_ref_2 = Gc::new(42); // Should NOT get collected.
-    force_collect();
 }
 
 
@@ -152,8 +153,6 @@ fn one_allocation() {
     assert_eq!(outstanding_allocations.as_ref().get(), 0);
     n_allocations(1, outstanding_allocations.clone());
     assert_eq!(outstanding_allocations.as_ref().get(), 1);
-    force_collect();
-    assert_eq!(outstanding_allocations.as_ref().get(), 0);
 }
 
 fn n_allocations(n: u32, tracker: Rc<Cell<u32>>) {
@@ -200,7 +199,4 @@ fn ten_allocations() {
     };
 
     assert_eq!(tracker.as_ref().get(), 10);
-    force_collect();
-    assert_eq!(tracker.as_ref().get(), 0);
 }
-

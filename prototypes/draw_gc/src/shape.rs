@@ -1,6 +1,6 @@
 // TODO: split out the view behavior into a separate file, rather than merging model and view.
 
-use bronze::*;
+use bronze_gc::*;
 use crate::graphics_context::*;
 
 
