@@ -10,7 +10,7 @@ Bronze relaxes some of the restrictions that Rust has by introducing a new smart
 
 For example, without Bronze, we have to carefully manage references and lifetimes:
 
-````
+```rust
 pub struct IntContainer {
     n: i32,
 }
@@ -26,11 +26,11 @@ pub fn test() {
     // Can't use c1 anymore because it's been moved to c2
     set(&mut c2, 42);
 }
-````
+```
 
 With Bronze, types that are not `Copy` can be freely referenced through smart pointers, which *are* `Copy`:
 
-````
+```rust
 // 
 #[derive(Trace, Finalize)]
 pub struct IntContainer {
@@ -50,7 +50,7 @@ pub fn test() {
     set(c1, 43);
     // Now they both reference an object with value 43.
 }
-````
+```
 
 Because `GcRef` implements `Deref`, and because Rust automatically inserts `*` when needed, you can generally treat `GcRef<T>` as if it were a `T` directly. For example, in `set()` above, the body assigns to `c.n`. This implicitly means to dereference the pointer and assign to `n` inside the referenced value. If you like, you can instead call `as_ref()` and `as_mut()` to obtain a reference or mutable reference to the data in the GC heap. 
 
