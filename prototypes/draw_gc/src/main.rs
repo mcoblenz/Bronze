@@ -1,96 +1,147 @@
-use objc::{rc::autoreleasepool};
+use objc::rc::autoreleasepool;
+use pixels::{Pixels, SurfaceTexture};
+use std::sync::Arc;
 use winit::{
+    application::ApplicationHandler,
     event::*,
     event_loop::*,
+    keyboard::{KeyCode, ModifiersState},
+    raw_window_handle::HasWindowHandle,
+    window::{Window, WindowId},
 };
-use pixels::{Pixels, SurfaceTexture};
 
-mod document_window_controller;
+mod command;
 mod document;
+mod document_window_controller;
+mod graphics_context;
+mod insert_shape_command;
 mod shape;
 mod square;
 mod undo_manager;
-mod command;
-mod insert_shape_command;
-mod graphics_context;
 
 use crate::document_window_controller::DocumentWindowController;
 
-fn main() {
-    let event_loop = winit::event_loop::EventLoop::new();
+struct App {
+    window: Option<Arc<Window>>,
+    modifiers_state: ModifiersState,
+    mouse_position: winit::dpi::PhysicalPosition<f64>,
+    document_controller: DocumentWindowController,
+    pixels: Option<Pixels<'static>>,
+}
 
-    let pixel_width: u32 = 320;
-    let pixel_height: u32 = 240;
+impl ApplicationHandler for App {
+    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        self.window = Some(Arc::new(
+            event_loop
+                .create_window(Window::default_attributes())
+                .unwrap(),
+        ));
 
-    let mut document_controller = DocumentWindowController::new(&event_loop, pixel_width, pixel_height);
+        // Pixels is not ideal; I'd rather be using CG APIs.
+        // But CG-Rust bindings look like a big hassle.
+        // TODO: move this into the DWC once Pixels no longer requires a type parameter that I can't instantiate.
+        let window_size = self.window.as_ref().unwrap().inner_size();
+        let w = self.window.as_ref().unwrap();
+        let surface_texture = SurfaceTexture::new(window_size.width, window_size.height, w.clone());
 
-     // Pixels is not ideal; I'd rather be using CG APIs.
-    // But CG-Rust bindings look like a big hassle.
-    // TODO: move this into the DWC once Pixels no longer requires a type parameter that I can't instantiate.
-    let window_size = document_controller.window.inner_size();
-    let surface_texture = SurfaceTexture::new(window_size.width, window_size.height, &document_controller.window);
-
-
-    let mut pixels = match 
-        Pixels::new(pixel_width, pixel_height, surface_texture) {
-            Ok(p) => p,
+        let mut pixels = match Pixels::new(window_size.width, window_size.height, surface_texture) {
+            Ok(p) => Some(p),
             Err(e) => panic!("{}", e),
         };
+        self.pixels = pixels;
+    }
 
-
-    let mut mouse_position = winit::dpi::PhysicalPosition::new(0.0, 0.0);
-    let mut modifiers_state = Default::default();
-
-    event_loop.run(move |event, _, control_flow| {
-        autoreleasepool(|| {
-            *control_flow = ControlFlow::Poll;
-
-            match event {
-                Event::WindowEvent { window_id: _, event } => match event {
-                    WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
-                    WindowEvent::Resized(_size) => {
-                        //layer.set_drawable_size(CGSize::new(size.width as f64, size.height as f64));
-                    },
-                    WindowEvent::CursorMoved {device_id: _, position, ..} => {
-                        mouse_position = position;
-                    },
-                    WindowEvent::MouseInput {device_id: _, state, button, ..} => {
-                        if state == ElementState::Pressed && button == MouseButton::Left {
-                            let logical_mouse_pos = mouse_position.to_logical(document_controller.window.scale_factor());
-                            document_controller.mouse_clicked(logical_mouse_pos);
-                        }
-                    },
-                    WindowEvent::ModifiersChanged(state) => {
-                        modifiers_state = state;
-                    }
-                    WindowEvent::KeyboardInput {device_id: _, input, is_synthetic: _} => {
-                        // Command key combinations
-                        if input.state == ElementState::Pressed && modifiers_state & ModifiersState::LOGO != Default::default(){
-                            match input.virtual_keycode {
-                                Some(VirtualKeyCode::Z) => {
-                                    if modifiers_state & ModifiersState::SHIFT == Default::default() {
-                                        document_controller.undo();
-                                    }
-                                    else {
-                                        document_controller.redo();
-                                    }
-                                },
-                                Some (_k) => {}
-                                None => {}
+    fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
+        match event {
+            WindowEvent::CloseRequested => {
+                event_loop.exit();
+            }
+            WindowEvent::Resized(_size) => {
+                //layer.set_drawable_size(CGSize::new(size.width as f64, size.height as f64));
+            }
+            WindowEvent::CursorMoved {
+                device_id: _,
+                position,
+                ..
+            } => {
+                self.mouse_position = position;
+            }
+            WindowEvent::MouseInput {
+                device_id: _,
+                state,
+                button,
+                ..
+            } => {
+                if state == ElementState::Pressed && button == MouseButton::Left {
+                    let logical_mouse_pos = self.mouse_position.to_logical(
+                        self.window
+                            .as_ref()
+                            .expect("window should exist")
+                            .scale_factor(),
+                    );
+                    self.document_controller.mouse_clicked(logical_mouse_pos);
+                }
+                self.window.as_ref().unwrap().request_redraw();
+            }
+            WindowEvent::ModifiersChanged(state) => {
+                self.modifiers_state = state.state();
+            }
+            WindowEvent::KeyboardInput {
+                device_id: _,
+                event,
+                is_synthetic: _,
+            } => {
+                // Command key combinations
+                if event.state == ElementState::Pressed
+                    && self.modifiers_state & ModifiersState::SUPER != Default::default()
+                {
+                    match event.text {
+                        Some(t) => {
+                            if t.as_str() == "Z"
+                                && self.modifiers_state & ModifiersState::SHIFT
+                                    == Default::default()
+                            {
+                                self.document_controller.undo();
+                            } else if t.as_str() == "Z"
+                                && self.modifiers_state & ModifiersState::SHIFT
+                                    != Default::default()
+                            {
+                                self.document_controller.redo();
                             }
                         }
+                        _k => {}
                     }
-                    _ => (),
-                },
-                Event::MainEventsCleared => {
-                    document_controller.window.request_redraw();
-                },
-                Event::RedrawRequested(_window_id) => {
-                    // For now, we only have one window.
-                    document_controller.redraw(&mut pixels);
                 }
-                _ => {}
             }
-        });
-    });
+            // WindowEvent::MainEventsCleared => {
+            //     self.window.unwrap().request_redraw();
+            // }
+            WindowEvent::RedrawRequested => {
+                // For now, we only have one window.
+                print!("Redrawing window...\n");
+                self.document_controller
+                    .redraw(&mut self.pixels.as_mut().unwrap());
+            }
+            _ => {}
+        }
+    }
+}
+
+fn main() {
+    let event_loop = winit::event_loop::EventLoop::new().unwrap();
+    let pixel_width: u32 = 800;
+    let pixel_height: u32 = 600;
+
+    let document_controller = DocumentWindowController::new(pixel_width, pixel_height);
+
+    let mouse_position = winit::dpi::PhysicalPosition::new(0.0, 0.0);
+
+    let mut app = App {
+        window: None,
+        modifiers_state: Default::default(),
+        mouse_position,
+        document_controller: document_controller,
+        pixels: None,
+    };
+    event_loop.run_app(&mut app);
 }

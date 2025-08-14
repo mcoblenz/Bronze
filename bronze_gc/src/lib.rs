@@ -3,8 +3,6 @@
 
 // The code pertaining to automatic tracking of borrowed references is from the Rust standard library, which is licensed under the MIT license (https://opensource.org/licenses/MIT).
 
-
-
 #![allow(non_upper_case_globals)]
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
@@ -12,28 +10,25 @@
 #![feature(unsize)]
 #![feature(extern_types)]
 
-#[cfg(feature="enable_garbage_collection")]
+#[cfg(feature = "enable_garbage_collection")]
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
-
-use std::{marker::PhantomData};
-use std::ptr::NonNull;
-use std::cell::{Cell, RefCell};
-use std::boxed::Box;
-use std::mem;
 use core::ops::CoerceUnsized;
+use std::boxed::Box;
+use std::cell::{Cell, RefCell};
+use std::marker::PhantomData;
 use std::marker::Unsize;
+use std::mem;
 use std::ops::{Deref, DerefMut};
+use std::ptr::NonNull;
 
-#[cfg(feature="enable_garbage_collection")]
+#[cfg(feature = "enable_garbage_collection")]
 use std::include;
 
 mod trace;
 
 //Re-export Finalize and GcTrace.
 pub use crate::trace::{Finalize, GcTrace};
-
-
 
 const INITIAL_THRESHOLD: usize = 100;
 
@@ -51,15 +46,11 @@ struct GcState {
 }
 
 // https://github.com/rust-lang/rfcs/blob/master/text/1861-extern-types.md
-extern {
+extern "C" {
     pub type Data;
     // TODO: Do I need this Vtable type?
     type Vtable;
 }
-
-
-
-
 
 /*
 * I want the following kinds of references to Gc objects:
@@ -69,7 +60,6 @@ extern {
 */
 
 // The copypasta between nullable and regular types should be removed somehow.
-
 
 // Based on rust-gc by Manishearth.
 struct GcBoxHeader {
@@ -118,9 +108,8 @@ impl<T: GcTrace + 'static> GcNullableBox<T> {
     pub fn take(&mut self) -> Option<T> {
         if self.is_null {
             None
-        }
-        else {
-            self.is_null = true; 
+        } else {
+            self.is_null = true;
             unsafe {
                 // Can't move even from behind a raw pointer,
                 // so I appear to be stuck with transmute_copy here
@@ -136,11 +125,13 @@ impl<T: GcTrace + ?Sized> GcBox<T> {
     pub fn new_ref(&mut self) -> GcRef<T> {
         let ptr: *mut Self = self;
 
-        GcRef {obj_ref: unsafe {NonNull::new_unchecked(ptr)}}
+        GcRef {
+            obj_ref: unsafe { NonNull::new_unchecked(ptr) },
+        }
     }
 
     pub fn ref_from_ptr(ptr: NonNull<Self>) -> GcRef<T> {
-        GcRef {obj_ref: ptr}
+        GcRef { obj_ref: ptr }
     }
 
     pub fn as_ref(&self) -> &T {
@@ -164,11 +155,8 @@ impl<T: ?Sized> GcBox<T> {
         }
     }
 
-
     fn erased(&self) -> &GcBox<Data> {
-        unsafe {
-            &*(self as *const GcBox<T> as *const GcBox<Data>)
-        }
+        unsafe { &*(self as *const GcBox<T> as *const GcBox<Data>) }
     }
 
     pub fn data(&self) -> &T {
@@ -198,11 +186,13 @@ impl<T: GcTrace + ?Sized> GcNullableBox<T> {
     pub fn new_ref(&mut self) -> GcNullableRef<T> {
         let ptr: *mut Self = self;
 
-        GcNullableRef {obj_ref: unsafe {NonNull::new_unchecked(ptr)}}
+        GcNullableRef {
+            obj_ref: unsafe { NonNull::new_unchecked(ptr) },
+        }
     }
 
     pub fn ref_from_ptr(ptr: NonNull<Self>) -> GcNullableRef<T> {
-        GcNullableRef {obj_ref: ptr}
+        GcNullableRef { obj_ref: ptr }
     }
 
     pub fn as_ref(&self) -> &T {
@@ -241,7 +231,7 @@ impl<T: GcTrace> GcRef<T> {
 
             // Collect if needed. Strategy from Manishearth.
 
-            #[cfg(feature="enable_garbage_collection")]
+            #[cfg(feature = "enable_garbage_collection")]
             if st.bytes_allocated > st.threshold {
                 println!("heap getting too full. Automatic garbage collection triggered.");
                 collect_garbage(&mut st);
@@ -254,17 +244,19 @@ impl<T: GcTrace> GcRef<T> {
                 }
             }
 
-
-
             let vtable = extract_vtable(&b);
 
             let header = GcBoxHeader {
                 marked: Cell::new(false),
                 vtable: vtable,
-                next: st.boxes_start.take()
+                next: st.boxes_start.take(),
             };
-            let bx_ptr = Box::into_raw(Box::new(GcBox {header, borrow_flag: Cell::new(UNUSED), data: b}));
-            let nonnull_ptr = unsafe {NonNull::new_unchecked(bx_ptr)};
+            let bx_ptr = Box::into_raw(Box::new(GcBox {
+                header,
+                borrow_flag: Cell::new(UNUSED),
+                data: b,
+            }));
+            let nonnull_ptr = unsafe { NonNull::new_unchecked(bx_ptr) };
             st.boxes_start = Some(nonnull_ptr);
             st.bytes_allocated += mem::size_of::<GcBox<T>>();
 
@@ -305,7 +297,10 @@ impl<'b, T: GcTrace + ?Sized + 'b> GcBorrow<'b, T> {
             //    is large enough to represent having one more read borrow
             borrow_cell.set(b);
             // println!("making a new borrow. New borrow count is {}", b);
-            Some(GcBorrow {value: value, borrow_cell: &borrow_cell})
+            Some(GcBorrow {
+                value: value,
+                borrow_cell: &borrow_cell,
+            })
         }
     }
 }
@@ -346,7 +341,10 @@ impl<'b, T: GcTrace + ?Sized + 'b> GcBorrowMut<'b, T> {
         match borrow {
             UNUSED => {
                 borrow_cell.set(UNUSED - 1);
-                Some(GcBorrowMut {value: value, borrow_cell: borrow_cell})
+                Some(GcBorrowMut {
+                    value: value,
+                    borrow_cell: borrow_cell,
+                })
             }
             _ => None,
         }
@@ -399,23 +397,19 @@ impl<T: GcTrace + ?Sized> GcRef<T> {
         }
     }
 
-    pub(crate) fn as_box<'a> (&'a self) -> &GcBox<T> {
-        unsafe {
-            self.obj_ref.as_ref()
-        }
+    pub(crate) fn as_box<'a>(&'a self) -> &GcBox<T> {
+        unsafe { self.obj_ref.as_ref() }
     }
 
-    pub(crate) fn as_mut_box<'a> (&'a mut self) -> &mut GcBox<T> {
-        unsafe {
-            self.obj_ref.as_mut()
-        }
+    pub(crate) fn as_mut_box<'a>(&'a mut self) -> &mut GcBox<T> {
+        unsafe { self.obj_ref.as_mut() }
     }
 
     pub fn borrow(&self) -> GcBorrow<'_, T> {
         let borrow_flag = &self.as_box().borrow_flag;
         match GcBorrow::new(self.as_ref(), borrow_flag) {
             Some(b) => b,
-            None => panic!("GC object is already mutably borrowed")
+            None => panic!("GC object is already mutably borrowed"),
         }
     }
 
@@ -423,14 +417,16 @@ impl<T: GcTrace + ?Sized> GcRef<T> {
         let gc_box = unsafe { self.obj_ref.as_ref() };
         match GcBorrowMut::new(self.as_mut(), &gc_box.borrow_flag) {
             Some(borrow) => borrow,
-            None => panic!("GC object is already mutably borrowed")
+            None => panic!("GC object is already mutably borrowed"),
         }
     }
 }
 
 impl<T: GcTrace + ?Sized> Clone for GcRef<T> {
     fn clone(&self) -> Self {
-        GcRef {obj_ref: self.obj_ref}
+        GcRef {
+            obj_ref: self.obj_ref,
+        }
     }
 }
 
@@ -442,7 +438,6 @@ unsafe impl<T: GcTrace + ?Sized> GcTrace for GcRef<T> {
         mark(this.as_ref());
     });
 }
-
 
 impl<T: ?Sized + GcTrace> PartialEq for GcRef<T> {
     fn eq(&self, other: &Self) -> bool {
@@ -458,19 +453,21 @@ impl<T: ?Sized + GcTrace> std::hash::Hash for GcRef<T> {
 
 impl<T: GcTrace + ?Sized + std::fmt::Display> std::fmt::Display for GcRef<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        unsafe {(self.obj_ref).as_ref().data.fmt(f)}
+        unsafe { (self.obj_ref).as_ref().data.fmt(f) }
     }
 }
 
 // See https://github.com/rust-lang/rust/issues/27732
-impl<T, U> CoerceUnsized<GcRef<U>> for GcRef<T> 
-    where T: Unsize<U> + GcTrace + ?Sized,
-    U: GcTrace + ?Sized 
-    {}
+impl<T, U> CoerceUnsized<GcRef<U>> for GcRef<T>
+where
+    T: Unsize<U> + GcTrace + ?Sized,
+    U: GcTrace + ?Sized,
+{
+}
 
 impl<T: GcTrace + ?Sized + std::fmt::Debug> std::fmt::Debug for GcRef<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        unsafe {(self.obj_ref).as_ref().data.fmt(f)}
+        unsafe { (self.obj_ref).as_ref().data.fmt(f) }
     }
 }
 
@@ -502,7 +499,7 @@ impl<T: GcTrace + ?Sized> GcNullableRef<T> {
         let gc_box = unsafe { self.obj_ref.as_ref() };
         match GcBorrow::new(self.as_ref(), &gc_box.borrow_flag) {
             Some(b) => b,
-            None => panic!("GC object is already mutably borrowed")
+            None => panic!("GC object is already mutably borrowed"),
         }
     }
 
@@ -510,14 +507,16 @@ impl<T: GcTrace + ?Sized> GcNullableRef<T> {
         let gc_box = unsafe { self.obj_ref.as_ref() };
         match GcBorrowMut::new(self.as_mut(), &gc_box.borrow_flag) {
             Some(b) => b,
-            None => panic!("GC object is already mutably borrowed")
+            None => panic!("GC object is already mutably borrowed"),
         }
     }
 }
 
 impl<T: GcTrace + ?Sized> Clone for GcNullableRef<T> {
     fn clone(&self) -> Self {
-        GcNullableRef {obj_ref: self.obj_ref}
+        GcNullableRef {
+            obj_ref: self.obj_ref,
+        }
     }
 }
 
@@ -531,8 +530,7 @@ impl<T: GcTrace> GcNullableRef<T> {
     }
 }
 
-impl<T: GcTrace + ?Sized + 'static> Copy for GcNullableRef<T> {
-}
+impl<T: GcTrace + ?Sized + 'static> Copy for GcNullableRef<T> {}
 
 impl<T: GcTrace + ?Sized> Finalize for GcNullableRef<T> {}
 unsafe impl<T: GcTrace + ?Sized> GcTrace for GcNullableRef<T> {
@@ -540,7 +538,6 @@ unsafe impl<T: GcTrace + ?Sized> GcTrace for GcNullableRef<T> {
         mark(this.as_ref());
     });
 }
-
 
 impl<T: ?Sized + GcTrace> PartialEq for GcNullableRef<T> {
     fn eq(&self, other: &Self) -> bool {
@@ -556,12 +553,11 @@ impl<T: ?Sized + GcTrace> std::hash::Hash for GcNullableRef<T> {
 
 impl<T: GcTrace + ?Sized + std::fmt::Display> std::fmt::Display for GcNullableRef<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        unsafe {(self.obj_ref).as_ref().data.fmt(f)}
+        unsafe { (self.obj_ref).as_ref().data.fmt(f) }
     }
 }
 
 //===================== GcUntypedRoot =================
-
 
 #[derive(Hash, Debug, Clone)]
 enum GcMaybeNullableRoot {
@@ -574,12 +570,12 @@ impl std::cmp::PartialEq for GcMaybeNullableRoot {
         match self {
             GcMaybeNullableRoot::BoxRef(ptr1) => match other {
                 GcMaybeNullableRoot::BoxRef(ptr2) => ptr1 == ptr2,
-                _ => false
-            }
+                _ => false,
+            },
             GcMaybeNullableRoot::NullableBoxRef(ptr1) => match other {
                 GcMaybeNullableRoot::NullableBoxRef(ptr2) => ptr1 == ptr2,
-                _ => false
-            }
+                _ => false,
+            },
         }
     }
 }
@@ -593,7 +589,9 @@ pub struct GcUntypedRoot {
 
 impl GcUntypedRoot {
     pub fn new(gc_ref: NonNull<GcBox<dyn GcTrace>>) -> Self {
-        GcUntypedRoot{gc_ref: GcMaybeNullableRoot::BoxRef (gc_ref)}
+        GcUntypedRoot {
+            gc_ref: GcMaybeNullableRoot::BoxRef(gc_ref),
+        }
     }
 }
 
@@ -608,12 +606,13 @@ impl Eq for GcUntypedRoot {}
 // Can't automatically derive Clone due to dyn GcTrace type.
 impl Clone for GcUntypedRoot {
     fn clone(&self) -> Self {
-        GcUntypedRoot {gc_ref: self.gc_ref.clone()}
+        GcUntypedRoot {
+            gc_ref: self.gc_ref.clone(),
+        }
     }
 }
 
 impl Copy for GcUntypedRoot {}
-
 
 // Each thread has its own list of roots, since GC references are neither Send nor Sync.
 thread_local!(static GC_STATE: RefCell<GcState> = RefCell::new(GcState {
@@ -625,7 +624,7 @@ thread_local!(static GC_STATE: RefCell<GcState> = RefCell::new(GcState {
 
 // For testing purposes
 pub fn boxes_len() -> usize {
-    let mut num_roots  = 0;
+    let mut num_roots = 0;
     GC_STATE.with(|st| {
         let state = st.borrow();
         let mut a_box = state.boxes_start;
@@ -651,7 +650,6 @@ impl<T: GcTrace> Gc<T> {
         GcRef::new(b)
     }
 
-
     pub fn new_nullable(b: T) -> GcNullableRef<T> {
         let nonnull_ptr = GC_STATE.with(|st| {
             let mut st = st.borrow_mut();
@@ -662,10 +660,15 @@ impl<T: GcTrace> Gc<T> {
             let header = GcBoxHeader {
                 marked: Cell::new(false),
                 vtable: vtable,
-                next: st.boxes_start.take()
+                next: st.boxes_start.take(),
             };
-            let bx_ptr = Box::into_raw(Box::new(GcNullableBox {is_null: false, header, borrow_flag: Cell::new(UNUSED), data: b}));
-            let nonnull_ptr = unsafe {NonNull::new_unchecked(bx_ptr)};
+            let bx_ptr = Box::into_raw(Box::new(GcNullableBox {
+                is_null: false,
+                header,
+                borrow_flag: Cell::new(UNUSED),
+                data: b,
+            }));
+            let nonnull_ptr = unsafe { NonNull::new_unchecked(bx_ptr) };
             st.nonnull_boxes_start = Some(nonnull_ptr);
             st.bytes_allocated += mem::size_of::<GcBox<T>>();
 
@@ -674,11 +677,9 @@ impl<T: GcTrace> Gc<T> {
 
         GcNullableBox::ref_from_ptr(nonnull_ptr)
     }
-
 }
 
-
-#[cfg(feature="enable_garbage_collection")]
+#[cfg(feature = "enable_garbage_collection")]
 pub fn force_collect() {
     GC_STATE.with(|st| {
         let mut st = st.borrow_mut();
@@ -686,42 +687,39 @@ pub fn force_collect() {
     });
 }
 
-#[cfg(feature="enable_garbage_collection")]
+#[cfg(feature = "enable_garbage_collection")]
 fn gc_root_chain() -> *const LLVMStackEntry {
-    unsafe {
-        get_llvm_gc_root_chain()
-    }
+    unsafe { get_llvm_gc_root_chain() }
 }
 
-#[cfg(feature="enable_garbage_collection")]
-fn iterate_roots<F>(f: F) 
-    where F: Fn(*mut c_void, *const u8) {
-    
-    unsafe { 
+#[cfg(feature = "enable_garbage_collection")]
+fn iterate_roots<F>(f: F)
+where
+    F: Fn(*mut c_void, *const u8),
+{
+    unsafe {
         let mut stack_entry = gc_root_chain();
         while !stack_entry.is_null() {
             let frame_map = (*stack_entry).Map;
             // println!("stack entry {:p}", stack_entry);
             if !frame_map.is_null() {
                 // println!("frame map {:p}", frame_map);
-                let num_roots = (*frame_map).NumRoots; 
+                let num_roots = (*frame_map).NumRoots;
                 // println!("{} roots found in this frame map", num_roots);
 
                 let roots = (*stack_entry).Roots.as_slice(num_roots as usize);
 
                 let num_meta = (*frame_map).NumMeta as usize;
                 let meta = (*frame_map).Meta.as_slice(num_meta as usize);
-                // Metadata is only present for "fat" roots, to indicate that they are actually pointers to real root pointers.                    
+                // Metadata is only present for "fat" roots, to indicate that they are actually pointers to real root pointers.
 
                 for i in 0..num_roots as usize {
                     let mut root = roots[i];
-                    let meta = 
-                        if i < num_meta {
-                            meta[i]
-                        }
-                        else {
-                            std::ptr::null()
-                        };
+                    let meta = if i < num_meta {
+                        meta[i]
+                    } else {
+                        std::ptr::null()
+                    };
 
                     // println!("root {:p} meta: {:?}", root, meta);
 
@@ -733,9 +731,12 @@ fn iterate_roots<F>(f: F)
                                 // Root should be interpreted as a pointer to the real root.
                                 let root_ptr = root as *const *mut c_void;
                                 root = *root_ptr;
-                            },
+                            }
                             0 => (), // No metadata here; this is a regular root (just a GcRef)
-                            _ => panic!("Invalid metadata found for root {:p}. meta: {:?}", root, meta)
+                            _ => panic!(
+                                "Invalid metadata found for root {:p}. meta: {:?}",
+                                root, meta
+                            ),
                         }
                         f(root, meta as *const u8);
                     }
@@ -745,21 +746,19 @@ fn iterate_roots<F>(f: F)
         }
     }
 }
-#[cfg(feature="enable_garbage_collection")]
+#[cfg(feature = "enable_garbage_collection")]
 fn collect_garbage(st: &mut GcState) {
     fn mark() {
         println!("marking all roots");
-        iterate_roots(|root, _meta| {
-            unsafe {
-                let root_as_gcbox: *mut GcBox<Data> = mem::transmute(root);
-                (*root_as_gcbox).trace_inner();
-            }
+        iterate_roots(|root, _meta| unsafe {
+            let root_as_gcbox: *mut GcBox<Data> = mem::transmute(root);
+            (*root_as_gcbox).trace_inner();
         });
     }
 
     fn sweep(state: &mut GcState) {
         let mut a_box = state.boxes_start;
-    
+
         // println!("sweeping");
 
         if a_box.is_some() {
@@ -776,12 +775,16 @@ fn collect_garbage(st: &mut GcState) {
                         // println!("Should collect {:p}", gc_box_ref);
                         let next_box_ref = a_box_nonnull_ref.as_ref().header.next;
 
-                        if prev_box == state.boxes_start.expect("must have at least one box").as_ptr() {
+                        if prev_box
+                            == state
+                                .boxes_start
+                                .expect("must have at least one box")
+                                .as_ptr()
+                        {
                             // Deleting the first node.
                             state.boxes_start = next_box_ref;
                             // println!("deleted the first node")
-                        }
-                        else {
+                        } else {
                             (*prev_box).header.next = next_box_ref;
                             // println!("deleted a node in the middle");
                         }
@@ -793,8 +796,7 @@ fn collect_garbage(st: &mut GcState) {
                         // Inflating the box will result in Rust freeing it when _inflated_box goes out of scope.
                         // Freeing the box will call drop(), which will call finalize_glue(), so we don't call finalize separately here.
                         let _inflated_box = Box::from_raw(a_box_nonnull_ref.as_ptr());
-                    }
-                    else {
+                    } else {
                         // println!("Not collecting {:p} (it is marked)", gc_box_ref);
                     }
                     prev_box = a_box_nonnull_ref.as_ptr();
@@ -804,12 +806,11 @@ fn collect_garbage(st: &mut GcState) {
         }
     }
 
-
     fn clear_marks(state: &mut GcState) {
         let mut a_box = state.boxes_start;
         while a_box.is_some() {
             let ptr = a_box.expect("cannot have empty Option here");
-            
+
             unsafe {
                 let gc_ref = GcBox::ref_from_ptr(ptr);
                 let gc_box = gc_ref.as_box();
@@ -826,7 +827,7 @@ fn collect_garbage(st: &mut GcState) {
     clear_marks(st);
 }
 
-#[cfg(feature="enable_garbage_collection")]
+#[cfg(feature = "enable_garbage_collection")]
 pub fn print_root_chain() {
     println!("Root chain: ");
     iterate_roots(|root, meta| {
